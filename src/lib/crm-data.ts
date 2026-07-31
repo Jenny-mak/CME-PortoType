@@ -23,8 +23,8 @@ export const modules: Array<{
   { key: "deals", label: "Loans" },
   {
     key: "tradeFinance",
-    label: "GTRF",
-    title: "Global Trade and Receivables Finance",
+    label: "GTS",
+    title: "Global Trade Solutions",
   },
   {
     key: "paymentService",
@@ -126,6 +126,8 @@ export const accounts: Account[] = [
     parentGroup: "King Holdings",
     primaryIdType: "BR Number",
     primaryIdNumber: "BR-100245",
+    productsOfInterest: ["Loans", "Trade Finance", "Cash Management"],
+    preferredChannels: ["Email", "In-Person"],
   },
   {
     id: "acc-2",
@@ -154,6 +156,8 @@ export const accounts: Account[] = [
     parentGroup: "",
     primaryIdType: "Type X",
     primaryIdNumber: "TX-88421",
+    productsOfInterest: ["Loans", "Payments"],
+    preferredChannels: ["Phone", "Email"],
   },
   {
     id: "acc-3",
@@ -182,6 +186,8 @@ export const accounts: Account[] = [
     parentGroup: "Press Media Group",
     primaryIdType: "C Number",
     primaryIdNumber: "C-55201",
+    productsOfInterest: ["Loans"],
+    preferredChannels: ["Email"],
   },
   {
     id: "acc-4",
@@ -210,6 +216,8 @@ export const accounts: Account[] = [
     parentGroup: "Morlong Group",
     primaryIdType: "BR Number",
     primaryIdNumber: "BR-100892",
+    productsOfInterest: ["Loans", "Trade Finance", "FX / Global Markets", "Sustainable Finance"],
+    preferredChannels: ["Email", "In-Person", "WeChat / Instant Message"],
   },
   {
     id: "acc-5",
@@ -238,6 +246,8 @@ export const accounts: Account[] = [
     parentGroup: "Pacific Trade Consortium",
     primaryIdType: "BR Number",
     primaryIdNumber: "BR-220417",
+    productsOfInterest: ["Trade Finance", "Payments", "Cash Management"],
+    preferredChannels: ["Phone", "Mobile", "Email"],
   },
   {
     id: "acc-6",
@@ -266,6 +276,8 @@ export const accounts: Account[] = [
     parentGroup: "Aurora International",
     primaryIdType: "Type X",
     primaryIdNumber: "TX-99102",
+    productsOfInterest: ["Loans", "Life Insurance", "Wealth Management"],
+    preferredChannels: ["Email", "In-Person"],
   },
   {
     id: "acc-7",
@@ -294,6 +306,8 @@ export const accounts: Account[] = [
     parentGroup: "",
     primaryIdType: "C Number",
     primaryIdNumber: "C-77830",
+    productsOfInterest: ["Payments", "Cash Management"],
+    preferredChannels: ["Mobile", "WeChat / Instant Message"],
   },
   {
     id: "acc-8",
@@ -322,6 +336,8 @@ export const accounts: Account[] = [
     parentGroup: "Sterling Family Trust",
     primaryIdType: "Type X",
     primaryIdNumber: "TX-33018",
+    productsOfInterest: ["Wealth Management", "Life Insurance", "FX / Global Markets"],
+    preferredChannels: ["In-Person", "Email", "Phone"],
   },
 ];
 

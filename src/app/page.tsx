@@ -59,7 +59,7 @@ import {
   useHomePanel,
   type HomePanelKey,
 } from "@/components/HomePanel";
-import { LoanKanbanBoard, LoanStageBar } from "@/components/LoanKanbanBoard";
+import { LoanFormStageTrail, LoanKanbanBoard, LoanStageBar } from "@/components/LoanKanbanBoard";
 import { LoginPage } from "@/components/LoginPage";
 import { ReportsWorkspace } from "@/components/ReportsWorkspace";
 import { HeaderSelectCheckbox, RowSelectCell, RowSelectionProvider } from "@/components/RowActions";
@@ -120,6 +120,7 @@ import {
   CampaignType,
   ClientIndustry,
   ClientKycStatus,
+  ClientProductInterest,
   ClientRating,
   ClientRegion,
   ClientRiskRating,
@@ -168,7 +169,7 @@ const createRecordOptions: Array<{ label: string; module: ModuleKey }> = [
   { label: "Contact", module: "contacts" },
   { label: "Client", module: "accounts" },
   { label: "Loan", module: "deals" },
-  { label: "GTRF", module: "tradeFinance" },
+  { label: "GTS", module: "tradeFinance" },
   { label: "GPS", module: "paymentService" },
   { label: "SF", module: "sustainableFinance" },
   { label: "GM", module: "globalMarket" },
@@ -1055,6 +1056,50 @@ function ModuleViewHeader({
   );
 }
 
+function ModuleNavButton({
+  module,
+  active,
+  onSelect,
+}: {
+  module: (typeof modules)[number];
+  active: boolean;
+  onSelect: (key: Exclude<ModuleKey, "home" | "reports">) => void;
+}) {
+  const tip = module.title && module.title !== module.label ? module.title : null;
+  const [tipPos, setTipPos] = useState<{ top: number; left: number } | null>(null);
+
+  return (
+    <>
+      <button
+        type="button"
+        className={`nav-item ${active ? "active" : ""}`}
+        onMouseEnter={(event) => {
+          if (!tip) return;
+          const rect = event.currentTarget.getBoundingClientRect();
+          setTipPos({ top: rect.top + rect.height / 2, left: rect.right + 2 });
+        }}
+        onMouseLeave={() => setTipPos(null)}
+        onClick={() => onSelect(module.key)}
+      >
+        {moduleIcons[module.key]}
+        <span>{module.label}</span>
+      </button>
+      {tip && tipPos
+        ? createPortal(
+            <span
+              className="nav-module-tooltip"
+              role="tooltip"
+              style={{ top: tipPos.top, left: tipPos.left }}
+            >
+              {tip}
+            </span>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
+
 function Sidebar({
   activeModule,
   expanded,
@@ -1185,15 +1230,12 @@ function Sidebar({
                 />
               </div>
               {filteredModules.map((module) => (
-                <button
-                  className={`nav-item ${activeModule === module.key ? "active" : ""}`}
+                <ModuleNavButton
                   key={module.key}
-                  title={module.title ?? module.label}
-                  onClick={() => selectModule(module.key)}
-                >
-                  {moduleIcons[module.key]}
-                  <span>{module.label}</span>
-                </button>
+                  module={module}
+                  active={activeModule === module.key}
+                  onSelect={selectModule}
+                />
               ))}
             </div>
           </div>
@@ -1282,16 +1324,12 @@ function Sidebar({
                   />
                 </div>
                 {filteredModules.map((module) => (
-                  <button
-                    className={`nav-item ${activeModule === module.key ? "active" : ""}`}
+                  <ModuleNavButton
                     key={module.key}
-                    title={module.title ?? module.label}
-                    onClick={() => selectModule(module.key)}
-                    type="button"
-                  >
-                    {moduleIcons[module.key]}
-                    <span>{module.label}</span>
-                  </button>
+                    module={module}
+                    active={activeModule === module.key}
+                    onSelect={selectModule}
+                  />
                 ))}
               </div>
             )}
@@ -1707,7 +1745,7 @@ type AttentionItem = {
   module: ModuleKey;
 };
 
-function buildAttentionItems(limit: number): AttentionItem[] {
+function buildAttentionItems(): AttentionItem[] {
   const items: AttentionItem[] = [];
 
   for (const account of accounts) {
@@ -1751,7 +1789,7 @@ function buildAttentionItems(limit: number): AttentionItem[] {
   }
 
   const kindOrder = { kyc: 0, lead: 1, client: 2 } as const;
-  return items.sort((a, b) => kindOrder[a.kind] - kindOrder[b.kind]).slice(0, limit);
+  return items.sort((a, b) => kindOrder[a.kind] - kindOrder[b.kind]);
 }
 
 function HomeDashboard({
@@ -1772,10 +1810,10 @@ function HomeDashboard({
   const quickAccessPanel = useHomePanel(expandedPanel === "quickAccess", (next) =>
     onExpandedPanelChange(next ? "quickAccess" : null),
   );
-  const attentionItems = useMemo(
-    () => buildAttentionItems(attentionPanel.expanded ? 60 : 8),
-    [attentionPanel.expanded],
-  );
+  const allAttentionItems = useMemo(() => buildAttentionItems(), []);
+  const attentionLimit = attentionPanel.expanded ? 60 : 8;
+  const attentionItems = allAttentionItems.slice(0, attentionLimit);
+  const attentionTotal = allAttentionItems.length;
   const quickAccessItems = useMemo(() => {
     const kycActions = accounts.filter(
       (account) =>
@@ -1824,7 +1862,11 @@ function HomeDashboard({
               <div className="home-quad-head">
                 <div className="home-quad-label">Needs attention</div>
                 <div className="home-quad-actions">
-                  <span className="home-quad-meta">{attentionItems.length} items</span>
+                  <span className="home-quad-meta">
+                    {attentionTotal === attentionItems.length
+                      ? `${attentionTotal} items`
+                      : `${attentionItems.length} of ${attentionTotal} items`}
+                  </span>
                   <HomePanelExpandButton
                     expanded={attentionPanel.expanded}
                     label="Needs attention"
@@ -3152,6 +3194,23 @@ const LEGAL_ENTITY_OPTIONS: LegalEntityType[] = [
   "Listed Company",
   "Branch",
 ];
+const PRODUCT_INTEREST_OPTIONS: ClientProductInterest[] = [
+  "Loans",
+  "Trade Finance",
+  "Payments",
+  "Cash Management",
+  "FX / Global Markets",
+  "Sustainable Finance",
+  "Life Insurance",
+  "Wealth Management",
+];
+const CLIENT_CHANNEL_OPTIONS: ContactPreferredChannel[] = [
+  "Email",
+  "Phone",
+  "Mobile",
+  "In-Person",
+  "WeChat / Instant Message",
+];
 
 function optionSlug(option: string) {
   return option
@@ -3265,6 +3324,16 @@ const accountColumns: ColumnDef[] = [
     colorable: false,
   },
   { key: "relationshipManager", header: "Relationship Manager", type: "text" },
+  {
+    key: "productsOfInterest",
+    header: "Products of Interest",
+    type: "text",
+  },
+  {
+    key: "preferredChannels",
+    header: "Preferred Channels",
+    type: "text",
+  },
   { key: "phone", header: "Phone", type: "phone" },
   { key: "email", header: "Email", type: "email" },
   { key: "sicCode", header: "SIC Code", type: "text" },
@@ -3317,6 +3386,7 @@ const accountColumns: ColumnDef[] = [
 function getAccountCellValue(account: Account, key: string) {
   const value = account[key as keyof Account];
   if (value == null) return "";
+  if (Array.isArray(value)) return value.join(", ");
   return value;
 }
 
@@ -3348,6 +3418,8 @@ function createEmptyAccount(): Account {
     parentGroup: "",
     primaryIdType: null,
     primaryIdNumber: "",
+    productsOfInterest: [],
+    preferredChannels: [],
   };
 }
 
@@ -3648,6 +3720,213 @@ function ChoiceField<T extends string>({
   );
 }
 
+/** Searchable multi-select with removable chips — keeps the menu open while toggling. */
+function MultiChoiceField<T extends string>({
+  options,
+  value,
+  onChange,
+  ariaLabel,
+  placeholder = "Select…",
+  searchPlaceholder = "Search options",
+}: {
+  options: readonly T[];
+  value: readonly T[];
+  onChange: (value: T[]) => void;
+  ariaLabel: string;
+  placeholder?: string;
+  searchPlaceholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState("");
+  const rootRef = useRef<HTMLDivElement>(null);
+  const filterInputRef = useRef<HTMLInputElement>(null);
+  const selected = useMemo(() => new Set(value), [value]);
+
+  useEffect(() => {
+    if (!open) return;
+    function handlePointerDown(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+        setFilter("");
+      }
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpen(false);
+        setFilter("");
+      }
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (open) filterInputRef.current?.focus();
+  }, [open]);
+
+  const filteredOptions = useMemo(() => {
+    const query = filter.trim().toLowerCase();
+    if (!query) return options;
+    return options.filter((option) => option.toLowerCase().includes(query));
+  }, [filter, options]);
+
+  const orderedSelected = useMemo(
+    () => options.filter((option) => selected.has(option)),
+    [options, selected],
+  );
+
+  function toggleOption(option: T) {
+    if (selected.has(option)) {
+      onChange(value.filter((item) => item !== option));
+    } else {
+      onChange([...value, option]);
+    }
+  }
+
+  function removeOption(option: T) {
+    onChange(value.filter((item) => item !== option));
+  }
+
+  function selectFiltered() {
+    const next = new Set(value);
+    for (const option of filteredOptions) next.add(option);
+    onChange(options.filter((option) => next.has(option)));
+  }
+
+  function clearAll() {
+    onChange([]);
+  }
+
+  return (
+    <div className={`multi-choice-field ${open ? "is-open" : ""}`} ref={rootRef}>
+      <button
+        type="button"
+        className="multi-choice-trigger field"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={ariaLabel}
+        onClick={() => setOpen((prev) => !prev)}
+      >
+        {orderedSelected.length === 0 ? (
+          <span className="multi-choice-placeholder">{placeholder}</span>
+        ) : (
+          <span className="multi-choice-chips">
+            {orderedSelected.map((option) => (
+              <span
+                key={option}
+                className="multi-choice-chip"
+                onClick={(event) => {
+                  event.stopPropagation();
+                }}
+              >
+                <span className="multi-choice-chip-label">{option}</span>
+                <span
+                  role="button"
+                  tabIndex={0}
+                  className="multi-choice-chip-remove"
+                  aria-label={`Remove ${option}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    removeOption(option);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      removeOption(option);
+                    }
+                  }}
+                >
+                  <X size={11} strokeWidth={2.4} />
+                </span>
+              </span>
+            ))}
+          </span>
+        )}
+        <ChevronDown size={14} className="multi-choice-caret" />
+      </button>
+
+      {open ? (
+        <div className="multi-choice-menu" role="listbox" aria-multiselectable="true" aria-label={ariaLabel}>
+          <div className="multi-choice-filter">
+            <Search size={13} />
+            <input
+              ref={filterInputRef}
+              value={filter}
+              placeholder={searchPlaceholder}
+              aria-label={searchPlaceholder}
+              onChange={(event) => setFilter(event.target.value)}
+              onClick={(event) => event.stopPropagation()}
+            />
+            {filter ? (
+              <button
+                type="button"
+                className="multi-choice-filter-clear"
+                aria-label="Clear search"
+                onClick={() => setFilter("")}
+              >
+                <X size={12} />
+              </button>
+            ) : null}
+          </div>
+
+          <div className="multi-choice-toolbar">
+            <span className="multi-choice-count">
+              {value.length === 0 ? "None selected" : `${value.length} selected`}
+            </span>
+            <div className="multi-choice-toolbar-actions">
+              <button
+                type="button"
+                className="multi-choice-action"
+                disabled={filteredOptions.length === 0 || filteredOptions.every((option) => selected.has(option))}
+                onClick={selectFiltered}
+              >
+                {filter.trim() ? "Select matches" : "Select all"}
+              </button>
+              <button
+                type="button"
+                className="multi-choice-action"
+                disabled={value.length === 0}
+                onClick={clearAll}
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+
+          <div className="multi-choice-options">
+            {filteredOptions.map((option) => {
+              const isSelected = selected.has(option);
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  className={`multi-choice-option ${isSelected ? "is-selected" : ""}`}
+                  role="option"
+                  aria-selected={isSelected}
+                  onClick={() => toggleOption(option)}
+                >
+                  <span className="multi-choice-check" aria-hidden="true">
+                    {isSelected ? <Check size={12} strokeWidth={2.6} /> : null}
+                  </span>
+                  <span className="multi-choice-option-label">{option}</span>
+                </button>
+              );
+            })}
+            {filteredOptions.length === 0 ? (
+              <p className="multi-choice-empty">No matching options</p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ClientFormPage({
   account,
   mode,
@@ -3659,9 +3938,11 @@ function ClientFormPage({
   onClose: () => void;
   onSave: (next: Account) => void;
 }) {
-  const [draft, setDraft] = useState<ClientFormDraft>(() =>
-    mode === "create" ? { ...account, status: null, clientStatus: null } : account,
-  );
+  const [draft, setDraft] = useState<ClientFormDraft>(() => ({
+    ...(mode === "create" ? { ...account, status: null, clientStatus: null } : account),
+    productsOfInterest: [...(account.productsOfInterest ?? [])],
+    preferredChannels: [...(account.preferredChannels ?? [])],
+  }));
   const [attempted, setAttempted] = useState(false);
 
   const companyNameError = attempted && !draft.companyName.trim();
@@ -3694,6 +3975,14 @@ function ClientFormPage({
             Clients
           </button>
           <h2>{mode === "create" ? "Create Client" : account.companyName.trim() || "Edit Client"}</h2>
+        </div>
+        <div className="client-form-actions">
+          <button type="button" className="secondary-button" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="button" className="primary-button" onClick={handleSave}>
+            Save
+          </button>
         </div>
       </header>
 
@@ -3839,6 +4128,37 @@ function ClientFormPage({
                 value={draft.segment}
                 onChange={(next) => update("segment", next)}
                 ariaLabel="Segment"
+              />
+            </div>
+          </div>
+        </section>
+
+        <section className="client-form-section">
+          <div className="client-form-section-head">
+            <strong>Coverage & Engagement</strong>
+            <span>Products of interest and preferred channels</span>
+          </div>
+          <div className="client-form-grid">
+            <div className="form-row client-form-span-2">
+              <label>Products of Interest</label>
+              <MultiChoiceField
+                options={PRODUCT_INTEREST_OPTIONS}
+                value={draft.productsOfInterest}
+                onChange={(next) => update("productsOfInterest", next)}
+                ariaLabel="Products of Interest"
+                placeholder="Select products…"
+                searchPlaceholder="Search products"
+              />
+            </div>
+            <div className="form-row client-form-span-2">
+              <label>Preferred Channels</label>
+              <MultiChoiceField
+                options={CLIENT_CHANNEL_OPTIONS}
+                value={draft.preferredChannels}
+                onChange={(next) => update("preferredChannels", next)}
+                ariaLabel="Preferred Channels"
+                placeholder="Select channels…"
+                searchPlaceholder="Search channels"
               />
             </div>
           </div>
@@ -4021,15 +4341,6 @@ function ClientFormPage({
           </div>
         </section>
       </div>
-
-      <footer className="client-form-footer">
-        <button type="button" className="secondary-button" onClick={onClose}>
-          Cancel
-        </button>
-        <button type="button" className="primary-button" onClick={handleSave}>
-          Save
-        </button>
-      </footer>
     </section>
   );
 }
@@ -4971,7 +5282,7 @@ function createEmptyLoan(config: ProductPipelineConfig): Deal {
   };
 }
 
-function LoanFormModal({
+function LoanFormPage({
   loan,
   mode,
   config,
@@ -5037,11 +5348,25 @@ function LoanFormModal({
     }));
   }
 
-  function handleSave() {
+  const stageIndex = config.stages.indexOf(draft.stage);
+  const isCompletion = draft.stage === "Completion" || stageIndex === config.stages.length - 1;
+  const nextStage =
+    stageIndex >= 0 && stageIndex < config.stages.length - 1 ? config.stages[stageIndex + 1] : null;
+
+  function setStage(stage: PipelineStage) {
+    setDraft((prev) => ({
+      ...prev,
+      stage,
+      probability: config.stageProbability[stage] ?? prev.probability,
+    }));
+  }
+
+  function buildSavedLoan(overrides: Partial<Deal> = {}): Deal | null {
     setAttempted(true);
-    if (!draft.name.trim() || !draft.account.trim() || draft.amount <= 0) return;
-    onSave({
+    if (!draft.name.trim() || !draft.account.trim() || draft.amount <= 0) return null;
+    return {
       ...draft,
+      ...overrides,
       name: draft.name.trim(),
       facilityNumber: draft.facilityNumber.trim(),
       account: draft.account.trim(),
@@ -5052,24 +5377,80 @@ function LoanFormModal({
       internalRating: draft.internalRating.trim(),
       remarks: draft.remarks.trim(),
       updatedAt: new Date().toISOString(),
+    };
+  }
+
+  function handleSave() {
+    const saved = buildSavedLoan();
+    if (!saved) return;
+    onSave(saved);
+    onClose();
+  }
+
+  function handleNextStage() {
+    if (!nextStage) return;
+    setStage(nextStage);
+  }
+
+  function handleFinish() {
+    const saved = buildSavedLoan({
+      stage: "Completion",
+      probability: config.stageProbability.Completion ?? 100,
+      facilityStatus: draft.facilityStatus === "Pipeline" ? "Committed" : draft.facilityStatus,
     });
+    if (!saved) return;
+    onSave(saved);
     onClose();
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <section className="modal-card client-form-modal loan-form-modal" onClick={(event) => event.stopPropagation()}>
-        <header className="client-form-header">
-          <div>
-            <p className="client-form-eyebrow">{config.label}</p>
-            <h2>{mode === "create" ? `Create ${config.recordLabel}` : `Edit ${config.recordLabel}`}</h2>
-          </div>
-          <button type="button" className="icon-button" aria-label="Close" onClick={onClose}>
-            <X size={16} />
+    <section className="client-form-page">
+      <header className="client-form-header">
+        <div>
+          <button type="button" className="client-form-back" onClick={onClose}>
+            <ChevronLeft size={14} />
+            {config.label}
           </button>
-        </header>
+          <h2>
+            {mode === "create"
+              ? `Create ${config.recordLabel}`
+              : loan.name.trim() || `Edit ${config.recordLabel}`}
+          </h2>
+        </div>
+        <div className="client-form-actions">
+          <span className="loan-form-probability">{draft.probability}% probability</span>
+          {isCompletion ? (
+            <button type="button" className="loan-form-finish-button" onClick={handleFinish}>
+              <Check size={15} strokeWidth={2.4} />
+              Finish
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="loan-form-next-button"
+              onClick={handleNextStage}
+              disabled={!nextStage}
+            >
+              Next Stage
+              <ChevronRight size={15} strokeWidth={2.4} />
+            </button>
+          )}
+          <button type="button" className="primary-button" onClick={handleSave}>
+            Save
+          </button>
+        </div>
+      </header>
 
-        <div className="client-form-body">
+      <div className="loan-form-stage-rail">
+        <LoanFormStageTrail
+          stages={config.stages}
+          current={draft.stage}
+          probabilities={config.stageProbability}
+          onSelect={setStage}
+        />
+      </div>
+
+      <div className="client-form-body">
           <section className="client-form-section">
             <div className="client-form-section-head">
               <strong>{config.recordLabel} Overview</strong>
@@ -5126,20 +5507,6 @@ function LoanFormModal({
                 <input id="loan-booking-branch" className="field" value={draft.bookingBranch}
                   placeholder="e.g. HK Central Corporate"
                   onChange={(event) => update("bookingBranch", event.target.value)} />
-              </div>
-              <div className="form-row">
-                <label htmlFor="loan-stage">Pipeline Stage</label>
-                <select id="loan-stage" className="field" value={draft.stage}
-                  onChange={(event) => {
-                    const stage = event.target.value as PipelineStage;
-                    setDraft((prev) => ({
-                      ...prev,
-                      stage,
-                      probability: config.stageProbability[stage] ?? prev.probability,
-                    }));
-                  }}>
-                  {config.stages.map((option) => <option key={option}>{option}</option>)}
-                </select>
               </div>
               <div className="form-row">
                 <label htmlFor="loan-facility-status">Facility Status</label>
@@ -5367,15 +5734,8 @@ function LoanFormModal({
               </div>
             </div>
           </section>
-        </div>
-
-        <footer className="client-form-footer">
-          <span className="loan-form-probability">Pipeline probability: {draft.probability}%</span>
-          <button type="button" className="secondary-button" onClick={onClose}>Cancel</button>
-          <button type="button" className="primary-button" onClick={handleSave}>Save {config.recordLabel}</button>
-        </footer>
-      </section>
-    </div>
+      </div>
+    </section>
   );
 }
 
@@ -5471,9 +5831,9 @@ function DealsWorkspace({
     return value == null || value === "" ? "" : String(value);
   }
 
-  const loanForm =
-    creating || editing ? (
-      <LoanFormModal
+  if (creating || editing) {
+    return (
+      <LoanFormPage
         key={editing?.id ?? `create-${moduleKey}`}
         loan={editing ?? createEmptyLoan(config)}
         mode={editing ? "edit" : "create"}
@@ -5489,7 +5849,8 @@ function DealsWorkspace({
           });
         }}
       />
-    ) : null;
+    );
+  }
 
   if (activeTab === "Kanban") {
     return (
@@ -5512,58 +5873,54 @@ function DealsWorkspace({
             }}
           />
         </div>
-        {loanForm}
       </>
     );
   }
 
   return (
-    <>
-      <RecordListShell
-        title={`All ${config.label}`}
-        filters={filters}
-        data={dealRows}
-        columns={columns}
-        getCellValue={getDealCellValue}
-        onCreate={() => {
-          setEditing(null);
-          setCreating(true);
-          setReturnToHome(false);
-        }}
-        renderRows={(visibleRows, orderedColumns) => (
-          <tbody>
-            {visibleRows.map((deal) => (
-              <tr
-                key={deal.id}
-                className="is-row-interactive"
-                onDoubleClick={() => {
-                  setCreating(false);
-                  setEditing({ ...deal });
-                  setReturnToHome(false);
-                }}
-              >
-                {orderedColumns.map((column) => {
-                  if (column.key === "select") {
-                    return (
-                      <td key={column.key} className="is-row-actions-col">
-                        {renderDealCell(deal, column)}
-                      </td>
-                    );
-                  }
-                  if (column.type === "enum" && column.colorable !== false) {
-                    const raw = deal[column.key as keyof Deal];
-                    const value = raw == null || raw === "" ? null : String(raw);
-                    return <EnumFillTd key={column.key} column={column} value={value} />;
-                  }
-                  return <td key={column.key}>{renderDealCell(deal, column)}</td>;
-                })}
-              </tr>
-            ))}
-          </tbody>
-        )}
-      />
-      {loanForm}
-    </>
+    <RecordListShell
+      title={`All ${config.label}`}
+      filters={filters}
+      data={dealRows}
+      columns={columns}
+      getCellValue={getDealCellValue}
+      onCreate={() => {
+        setEditing(null);
+        setCreating(true);
+        setReturnToHome(false);
+      }}
+      renderRows={(visibleRows, orderedColumns) => (
+        <tbody>
+          {visibleRows.map((deal) => (
+            <tr
+              key={deal.id}
+              className="is-row-interactive"
+              onDoubleClick={() => {
+                setCreating(false);
+                setEditing({ ...deal });
+                setReturnToHome(false);
+              }}
+            >
+              {orderedColumns.map((column) => {
+                if (column.key === "select") {
+                  return (
+                    <td key={column.key} className="is-row-actions-col">
+                      {renderDealCell(deal, column)}
+                    </td>
+                  );
+                }
+                if (column.type === "enum" && column.colorable !== false) {
+                  const raw = deal[column.key as keyof Deal];
+                  const value = raw == null || raw === "" ? null : String(raw);
+                  return <EnumFillTd key={column.key} column={column} value={value} />;
+                }
+                return <td key={column.key}>{renderDealCell(deal, column)}</td>;
+              })}
+            </tr>
+          ))}
+        </tbody>
+      )}
+    />
   );
 }
 
@@ -5773,7 +6130,7 @@ type CampaignFormDraft = Omit<
   currency: Deal["currency"] | null;
 };
 
-function CampaignFormModal({
+function CampaignFormPage({
   campaign,
   mode,
   onClose,
@@ -5824,19 +6181,28 @@ function CampaignFormModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <section className="modal-card client-form-modal" onClick={(event) => event.stopPropagation()}>
-        <header className="client-form-header">
-          <div>
-            <p className="client-form-eyebrow">Campaigns</p>
-            <h2>{mode === "create" ? "Create Campaign" : "Edit Campaign"}</h2>
-          </div>
-          <button type="button" className="icon-button" aria-label="Close" onClick={onClose}>
-            <X size={16} />
+    <section className="client-form-page">
+      <header className="client-form-header">
+        <div>
+          <button type="button" className="client-form-back" onClick={onClose}>
+            <ChevronLeft size={14} />
+            Campaigns
           </button>
-        </header>
+          <h2>
+            {mode === "create" ? "Create Campaign" : campaign.name.trim() || "Edit Campaign"}
+          </h2>
+        </div>
+        <div className="client-form-actions">
+          <button type="button" className="secondary-button" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="button" className="primary-button" onClick={handleSave}>
+            Save
+          </button>
+        </div>
+      </header>
 
-        <div className="client-form-body">
+      <div className="client-form-body">
           <section className={`client-form-section ${nameError || typeError || statusError ? "is-invalid" : ""}`}>
             <div className="client-form-section-head">
               <strong>Campaign Information</strong>
@@ -6108,18 +6474,8 @@ function CampaignFormModal({
               </div>
             </div>
           </section>
-        </div>
-
-        <footer className="client-form-footer">
-          <button type="button" className="secondary-button" onClick={onClose}>
-            Cancel
-          </button>
-          <button type="button" className="primary-button" onClick={handleSave}>
-            {mode === "create" ? "Save Campaign" : "Save Changes"}
-          </button>
-        </footer>
-      </section>
-    </div>
+      </div>
+    </section>
   );
 }
 
@@ -6202,59 +6558,60 @@ function CampaignWorkspace({
     return value == null || value === "" ? "" : String(value);
   }
 
-  return (
-    <>
-      <RecordListShell
-        title="All Campaigns"
-        filters={campaignFilters}
-        data={rows}
-        columns={campaignColumns}
-        getCellValue={getCampaignCellValue}
-        onCreate={() => {
-          setEditing({ campaign: createEmptyCampaign(), mode: "create" });
-          setReturnToHome(false);
-        }}
-        renderRows={(visibleRows, orderedColumns) => (
-          <tbody>
-            {visibleRows.map((row) => (
-              <tr
-                key={row.id}
-                className="is-row-interactive"
-                onDoubleClick={() => {
-                  setEditing({ campaign: { ...row }, mode: "edit" });
-                  setReturnToHome(false);
-                }}
-              >
-                {orderedColumns.map((column) => {
-                  if (column.key === "select") {
-                    return (
-                      <td key={column.key} className="is-row-actions-col">
-                        {renderCampaignCell(row, column)}
-                      </td>
-                    );
-                  }
-                  if (column.type === "enum" && column.colorable !== false) {
-                    const raw = row[column.key as keyof Campaign];
-                    const value = raw == null || raw === "" ? null : String(raw);
-                    return <EnumFillTd key={column.key} column={column} value={value} />;
-                  }
-                  return <td key={column.key}>{renderCampaignCell(row, column)}</td>;
-                })}
-              </tr>
-            ))}
-          </tbody>
-        )}
+  if (editing) {
+    return (
+      <CampaignFormPage
+        key={editing.mode === "create" ? "create-campaign" : editing.campaign.id}
+        campaign={editing.campaign}
+        mode={editing.mode}
+        onClose={dismissForm}
+        onSave={handleSave}
       />
-      {editing ? (
-        <CampaignFormModal
-          key={editing.mode === "create" ? "create-campaign" : editing.campaign.id}
-          campaign={editing.campaign}
-          mode={editing.mode}
-          onClose={dismissForm}
-          onSave={handleSave}
-        />
-      ) : null}
-    </>
+    );
+  }
+
+  return (
+    <RecordListShell
+      title="All Campaigns"
+      filters={campaignFilters}
+      data={rows}
+      columns={campaignColumns}
+      getCellValue={getCampaignCellValue}
+      onCreate={() => {
+        setEditing({ campaign: createEmptyCampaign(), mode: "create" });
+        setReturnToHome(false);
+      }}
+      renderRows={(visibleRows, orderedColumns) => (
+        <tbody>
+          {visibleRows.map((row) => (
+            <tr
+              key={row.id}
+              className="is-row-interactive"
+              onDoubleClick={() => {
+                setEditing({ campaign: { ...row }, mode: "edit" });
+                setReturnToHome(false);
+              }}
+            >
+              {orderedColumns.map((column) => {
+                if (column.key === "select") {
+                  return (
+                    <td key={column.key} className="is-row-actions-col">
+                      {renderCampaignCell(row, column)}
+                    </td>
+                  );
+                }
+                if (column.type === "enum" && column.colorable !== false) {
+                  const raw = row[column.key as keyof Campaign];
+                  const value = raw == null || raw === "" ? null : String(raw);
+                  return <EnumFillTd key={column.key} column={column} value={value} />;
+                }
+                return <td key={column.key}>{renderCampaignCell(row, column)}</td>;
+              })}
+            </tr>
+          ))}
+        </tbody>
+      )}
+    />
   );
 }
 

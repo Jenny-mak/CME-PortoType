@@ -51,7 +51,7 @@ export const PRODUCT_PIPELINE_CONFIGS: Record<ProductPipelineModuleKey, ProductP
   },
   tradeFinance: {
     key: "tradeFinance",
-    label: "GTRF",
+    label: "GTS",
     recordLabel: "Facility",
     facilityPrefix: "TF",
     stages: FULL_PIPELINE,

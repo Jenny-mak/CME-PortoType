@@ -78,6 +78,24 @@ export type LegalEntityType =
   | "Listed Company"
   | "Branch";
 
+/** Franchise / product lines a client holds or is interested in. */
+export type ClientProductInterest =
+  | "Loans"
+  | "Trade Finance"
+  | "Payments"
+  | "Cash Management"
+  | "FX / Global Markets"
+  | "Sustainable Finance"
+  | "Life Insurance"
+  | "Wealth Management";
+
+export type ContactPreferredChannel =
+  | "Email"
+  | "Phone"
+  | "Mobile"
+  | "In-Person"
+  | "WeChat / Instant Message";
+
 export type Account = {
   id: string;
   companyName: string;
@@ -105,6 +123,10 @@ export type Account = {
   parentGroup: string;
   primaryIdType: PrimaryIdType | null;
   primaryIdNumber: string;
+  /** Products the client holds or is interested in (cross-sell). */
+  productsOfInterest: ClientProductInterest[];
+  /** Preferred ways to engage the client relationship. */
+  preferredChannels: ContactPreferredChannel[];
 };
 
 export type ContactStatus = "Active" | "Inactive";
@@ -117,13 +139,6 @@ export type ContactRole =
   | "Legal / Compliance"
   | "Operations"
   | "Other";
-
-export type ContactPreferredChannel =
-  | "Email"
-  | "Phone"
-  | "Mobile"
-  | "In-Person"
-  | "WeChat / Instant Message";
 
 export type Contact = {
   id: string;

@@ -26,7 +26,7 @@ const MODULE_LABELS: Partial<Record<ModuleKey, string>> = {
   leads: "Leads",
   accounts: "Clients",
   deals: "Loans",
-  tradeFinance: "GTRF",
+  tradeFinance: "GTS",
   paymentService: "GPS",
   sustainableFinance: "SF",
   globalMarket: "GM",
