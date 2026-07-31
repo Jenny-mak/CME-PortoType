@@ -4422,8 +4422,8 @@ function AccountsWorkspace({
         />
       );
     }
-    const value = account[column.key as keyof Account];
-    return value == null || value === "" ? "" : String(value);
+    const value = getAccountCellValue(account, column.key);
+    return value === "" ? "" : String(value);
   }
 
   if (editing) {

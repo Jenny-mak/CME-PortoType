@@ -33,9 +33,13 @@ export function LoanFormStageTrail({
   onSelect: (stage: PipelineStage) => void;
 }) {
   const themeId = DEFAULT_PIPELINE_STAGE_THEME;
-  const currentIndex = Math.max(0, stages.indexOf(current));
-  const progress =
-    stages.length <= 1 ? 100 : (currentIndex / (stages.length - 1)) * 100;
+  const currentIndex = stages.indexOf(current);
+  const knownStage = currentIndex >= 0;
+  const progress = !knownStage
+    ? 0
+    : stages.length <= 1
+      ? 100
+      : (currentIndex / (stages.length - 1)) * 100;
 
   return (
     <div
@@ -53,8 +57,13 @@ export function LoanFormStageTrail({
       <div className="loan-form-stage-steps">
         {stages.map((stage, index) => {
           const color = getPipelineStageColor(themeId, stage);
-          const state =
-            index < currentIndex ? "done" : index === currentIndex ? "current" : "upcoming";
+          const state = !knownStage
+            ? "upcoming"
+            : index < currentIndex
+              ? "done"
+              : index === currentIndex
+                ? "current"
+                : "upcoming";
           const probability = probabilities[stage];
           return (
             <button
