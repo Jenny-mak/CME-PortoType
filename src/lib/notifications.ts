@@ -7,6 +7,11 @@ export const STALE_LOAN_DAYS = 7;
 
 export type AppNotification = {
   id: string;
+  /**
+   * Changes whenever the alert's underlying state does, so dismissing an alert only
+   * silences the state it was raised for instead of hiding the record forever.
+   */
+  signature: string;
   type: "stale_loan" | "overdue_review";
   title: string;
   body: string;
@@ -54,6 +59,7 @@ export function buildLoanNotifications(
       if (staleDays >= STALE_LOAN_DAYS) {
         notifications.push({
           id: `stale:${module}:${loan.id}`,
+          signature: `stale:${module}:${loan.id}:${loan.updatedAt}:${staleDays}`,
           type: "stale_loan",
           title: `${label} idle for ${staleDays} days`,
           body: `${loan.name || loan.facilityNumber} has not been updated since ${formatDaysAgo(staleDays)}.`,
@@ -70,6 +76,7 @@ export function buildLoanNotifications(
       const overdueDays = daysBetween(reviewMs, now);
       notifications.push({
         id: `review:${module}:${loan.id}`,
+        signature: `review:${module}:${loan.id}:${loan.nextReviewDate}:${overdueDays}`,
         type: "overdue_review",
         title: `Review overdue · ${label}`,
         body: `${loan.name || loan.facilityNumber} next review was due ${formatDaysAgo(overdueDays)}.`,

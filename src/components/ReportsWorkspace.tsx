@@ -1,6 +1,13 @@
 "use client";
 
-import { startTransition, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  startTransition,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import {
   Area,
   AreaChart,
@@ -31,11 +38,28 @@ import {
   accounts,
   campaigns,
   calls,
-  deals,
   leads,
   meetings,
   tasks,
 } from "@/lib/crm-data";
+import {
+  getPipelineLoansSnapshot,
+  subscribePipelineLoans,
+} from "@/lib/pipeline-loans";
+import type { Deal } from "@/lib/types";
+import {
+  ReportDrillProvider,
+  accountDrill,
+  callDrill,
+  campaignDrill,
+  dealDrill,
+  leadDrill,
+  makeDrillHandler,
+  meetingDrill,
+  taskDrill,
+  useReportDrill,
+  type DrillRequest,
+} from "@/components/ReportDrillDown";
 
 /** Hues are ordered so neighbouring series never land on adjacent parts of the wheel. */
 const CHART_COLORS = [
@@ -50,6 +74,10 @@ const CHART_COLORS = [
   "#DB4A8C", // pink
   "#77AF2E", // lime
 ];
+
+function seriesColor(index: number) {
+  return CHART_COLORS[index % CHART_COLORS.length];
+}
 
 const SERIES = {
   crimson: CHART_COLORS[0],
@@ -66,6 +94,24 @@ const SCALE = {
   low: "#1E9E6A",
   cold: SERIES.blue,
 } as const;
+
+function riskColor(name: string) {
+  if (name === "High") return SCALE.high;
+  if (name === "Medium") return SCALE.medium;
+  return SCALE.low;
+}
+
+function temperatureColor(name: string) {
+  if (name === "Hot") return SCALE.high;
+  if (name === "Warm") return SCALE.medium;
+  return SCALE.cold;
+}
+
+function priorityColor(name: string) {
+  if (name === "High") return SCALE.high;
+  if (name === "Normal") return SCALE.cold;
+  return SCALE.low;
+}
 
 const AXIS_TICK_COLOR = "var(--chart-axis)";
 const GRID_COLOR = "var(--chart-grid)";
@@ -222,7 +268,18 @@ function ReportCard({
   );
 }
 
+/** Reports read the live loan store so pipeline edits show up in KPIs and charts. */
+function usePipelineDeals() {
+  const snapshot = useSyncExternalStore(
+    subscribePipelineLoans,
+    getPipelineLoansSnapshot,
+    getPipelineLoansSnapshot,
+  );
+  return snapshot.deals;
+}
+
 function KpiStrip() {
+  const deals = usePipelineDeals();
   const kpis = useMemo(() => {
     const pipeline = deals.reduce((sum, d) => sum + d.amount, 0);
     const outstanding = deals.reduce((sum, d) => sum + d.outstandingBalance, 0);
@@ -241,7 +298,7 @@ function KpiStrip() {
       { label: "Lead conversion", value: `${leadRate}%`, hint: `${convertedLeads}/${leads.length} converted` },
       { label: "Campaign leads", value: String(campaignLeads), hint: `${formatCompact(campaignSpend)} spent` },
     ];
-  }, []);
+  }, [deals]);
 
   return (
     <div className="report-kpi-strip">
@@ -256,7 +313,36 @@ function KpiStrip() {
   );
 }
 
+/** Drill target for the stacked activity chart, where each category maps to a different module. */
+function activityRequest(name: string, series: "open" | "done"): DrillRequest | null {
+  const chart = "Activity workload";
+  const open = series === "open";
+  if (name === "Tasks") {
+    const rows = tasks.filter((t) => (open ? t.status !== "Completed" : t.status === "Completed"));
+    return taskDrill(chart, `Tasks · ${open ? "Open" : "Completed"}`, rows, open ? SERIES.crimson : SERIES.teal);
+  }
+  if (name === "Meetings") {
+    if (!open) return null;
+    return meetingDrill(chart, "Meetings · Scheduled", meetings, SERIES.crimson);
+  }
+  if (name === "Calls") {
+    const direction = open ? "Outbound" : "Inbound";
+    const rows = calls.filter((c) => c.type === direction);
+    return callDrill(chart, `Calls · ${direction}`, rows, open ? SERIES.crimson : SERIES.teal);
+  }
+  if (name === "Leads") {
+    const rows = open
+      ? leads.filter((l) => l.status === "New" || l.status === "Contacted")
+      : leads.filter((l) => l.status === "Qualified" || l.status === "Converted");
+    return leadDrill(chart, `Leads · ${open ? "Working" : "Progressed"}`, rows, open ? SERIES.crimson : SERIES.teal);
+  }
+  return null;
+}
+
 function OverviewPanel() {
+  const drill = makeDrillHandler(useReportDrill());
+  const deals = usePipelineDeals();
+
   const stageData = useMemo(
     () =>
       STAGE_ORDER.map((stage) => {
@@ -267,11 +353,11 @@ function OverviewPanel() {
           count: rows.length,
         };
       }),
-    [],
+    [deals],
   );
 
-  const productData = useMemo(() => sumBy(deals, (d) => d.productType, (d) => d.amount), []);
-  const riskData = useMemo(() => countBy(deals, (d) => d.riskGrade), []);
+  const productData = useMemo(() => sumBy(deals, (d) => d.productType, (d) => d.amount), [deals]);
+  const riskData = useMemo(() => countBy(deals, (d) => d.riskGrade), [deals]);
   const leadData = useMemo(() => countBy(leads, (l) => l.status), []);
   const clientStatus = useMemo(() => countBy(accounts, (a) => a.clientStatus), []);
 
@@ -294,9 +380,24 @@ function OverviewPanel() {
             <XAxis dataKey="name" tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} axisLine={false} tickLine={false} />
             <YAxis tickFormatter={formatCompact} tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} axisLine={false} tickLine={false} />
             <ReportTooltip money />
-            <Bar {...CHART_MOTION} activeBar dataKey="amount" name="Amount" radius={[6, 6, 0, 0]} maxBarSize={48}>
+            <Bar
+              {...CHART_MOTION}
+              activeBar
+              dataKey="amount"
+              name="Amount"
+              radius={[6, 6, 0, 0]}
+              maxBarSize={48}
+              onClick={drill(stageData, (row, i) =>
+                dealDrill(
+                  "Loan pipeline by stage",
+                  row.name,
+                  deals.filter((d) => d.stage === row.name),
+                  seriesColor(i),
+                ),
+              )}
+            >
               {stageData.map((_, i) => (
-                <Cell key={STAGE_ORDER[i]} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                <Cell key={STAGE_ORDER[i]} fill={seriesColor(i)} />
               ))}
             </Bar>
           </BarChart>
@@ -306,9 +407,26 @@ function OverviewPanel() {
       <ReportCard title="Product mix" subtitle="Pipeline amount by product">
         <ResponsiveContainer width="100%" height={280}>
           <PieChart>
-            <Pie {...CHART_MOTION} shape={PieSliceShape} data={productData} dataKey="value" nameKey="name" innerRadius={58} outerRadius={92} paddingAngle={3}>
+            <Pie
+              {...CHART_MOTION}
+              shape={PieSliceShape}
+              data={productData}
+              dataKey="value"
+              nameKey="name"
+              innerRadius={58}
+              outerRadius={92}
+              paddingAngle={3}
+              onClick={drill(productData, (row, i) =>
+                dealDrill(
+                  "Product mix",
+                  row.name,
+                  deals.filter((d) => d.productType === row.name),
+                  seriesColor(i),
+                ),
+              )}
+            >
               {productData.map((_, i) => (
-                <Cell key={productData[i].name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                <Cell key={productData[i].name} fill={seriesColor(i)} />
               ))}
             </Pie>
             <ReportTooltip money />
@@ -324,11 +442,24 @@ function OverviewPanel() {
             cy="50%"
             innerRadius="28%"
             outerRadius="90%"
-            data={riskData.map((d, i) => ({ ...d, fill: CHART_COLORS[i % CHART_COLORS.length] }))}
+            data={riskData.map((d, i) => ({ ...d, fill: seriesColor(i) }))}
             startAngle={90}
             endAngle={-270}
           >
-            <RadialBar {...CHART_MOTION} background dataKey="value" cornerRadius={6} />
+            <RadialBar
+              {...CHART_MOTION}
+              background
+              dataKey="value"
+              cornerRadius={6}
+              onClick={drill(riskData, (row, i) =>
+                dealDrill(
+                  "Risk grade mix",
+                  `${row.name} risk`,
+                  deals.filter((d) => d.riskGrade === row.name),
+                  seriesColor(i),
+                ),
+              )}
+            />
             <Legend wrapperStyle={{ fontSize: 12 }} />
             <ReportTooltip />
           </RadialBarChart>
@@ -342,9 +473,24 @@ function OverviewPanel() {
             <XAxis type="number" allowDecimals={false} tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} axisLine={false} tickLine={false} />
             <YAxis type="category" dataKey="name" width={78} tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} axisLine={false} tickLine={false} />
             <ReportTooltip />
-            <Bar {...CHART_MOTION} activeBar dataKey="value" name="Leads" radius={[0, 6, 6, 0]} maxBarSize={22}>
+            <Bar
+              {...CHART_MOTION}
+              activeBar
+              dataKey="value"
+              name="Leads"
+              radius={[0, 6, 6, 0]}
+              maxBarSize={22}
+              onClick={drill(leadData, (row, i) =>
+                leadDrill(
+                  "Lead funnel",
+                  row.name,
+                  leads.filter((l) => l.status === row.name),
+                  seriesColor(i),
+                ),
+              )}
+            >
               {leadData.map((_, i) => (
-                <Cell key={leadData[i].name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                <Cell key={leadData[i].name} fill={seriesColor(i)} />
               ))}
             </Bar>
           </BarChart>
@@ -354,9 +500,25 @@ function OverviewPanel() {
       <ReportCard title="Client franchise" subtitle="ETB / NTB / NNTB mix">
         <ResponsiveContainer width="100%" height={280}>
           <PieChart>
-            <Pie {...CHART_MOTION} shape={PieSliceShape} data={clientStatus} dataKey="value" nameKey="name" outerRadius={92} label>
+            <Pie
+              {...CHART_MOTION}
+              shape={PieSliceShape}
+              data={clientStatus}
+              dataKey="value"
+              nameKey="name"
+              outerRadius={92}
+              label
+              onClick={drill(clientStatus, (row, i) =>
+                accountDrill(
+                  "Client franchise",
+                  row.name,
+                  accounts.filter((a) => a.clientStatus === row.name),
+                  seriesColor(i + 2),
+                ),
+              )}
+            >
               {clientStatus.map((_, i) => (
-                <Cell key={clientStatus[i].name} fill={CHART_COLORS[(i + 2) % CHART_COLORS.length]} />
+                <Cell key={clientStatus[i].name} fill={seriesColor(i + 2)} />
               ))}
             </Pie>
             <ReportTooltip />
@@ -373,8 +535,28 @@ function OverviewPanel() {
             <YAxis allowDecimals={false} tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} axisLine={false} tickLine={false} />
             <ReportTooltip />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar {...CHART_MOTION} activeBar dataKey="open" name="Open / Outbound" stackId="a" fill={SERIES.crimson} radius={[0, 0, 0, 0]} maxBarSize={42} />
-            <Bar {...CHART_MOTION} activeBar dataKey="done" name="Done / Inbound" stackId="a" fill={SERIES.teal} radius={[6, 6, 0, 0]} maxBarSize={42} />
+            <Bar
+              {...CHART_MOTION}
+              activeBar
+              dataKey="open"
+              name="Open / Outbound"
+              stackId="a"
+              fill={SERIES.crimson}
+              radius={[0, 0, 0, 0]}
+              maxBarSize={42}
+              onClick={drill(activityTrend, (row) => activityRequest(row.name, "open"))}
+            />
+            <Bar
+              {...CHART_MOTION}
+              activeBar
+              dataKey="done"
+              name="Done / Inbound"
+              stackId="a"
+              fill={SERIES.teal}
+              radius={[6, 6, 0, 0]}
+              maxBarSize={42}
+              onClick={drill(activityTrend, (row) => activityRequest(row.name, "done"))}
+            />
           </BarChart>
         </ResponsiveContainer>
       </ReportCard>
@@ -383,19 +565,26 @@ function OverviewPanel() {
 }
 
 function LoansPanel() {
-  const byBu = useMemo(() => sumBy(deals, (d) => d.businessUnit, (d) => d.amount), []);
-  const byStatus = useMemo(() => sumBy(deals, (d) => d.facilityStatus, (d) => d.outstandingBalance), []);
+  const drill = makeDrillHandler(useReportDrill());
+  const deals = usePipelineDeals();
+
+  const byBu = useMemo(() => sumBy(deals, (d) => d.businessUnit, (d) => d.amount), [deals]);
+  const byStatus = useMemo(
+    () => sumBy(deals, (d) => d.facilityStatus, (d) => d.outstandingBalance),
+    [deals],
+  );
   const utilization = useMemo(
     () =>
       deals
         .filter((d) => d.approvedAmount > 0)
         .map((d) => ({
+          id: d.id,
           name: d.name.replace(/ (Facility|Renewal|Line|Loan|RCF).*$/, "").slice(0, 18),
           utilization: d.utilizationPct,
           ltv: d.ltv,
           outstanding: d.outstandingBalance,
         })),
-    [],
+    [deals],
   );
   const tenorSpread = useMemo(
     () =>
@@ -406,9 +595,9 @@ function LoansPanel() {
         amount: d.amount,
         product: d.productType,
       })),
-    [],
+    [deals],
   );
-  const currencyMix = useMemo(() => sumBy(deals, (d) => d.currency, (d) => d.amount), []);
+  const currencyMix = useMemo(() => sumBy(deals, (d) => d.currency, (d) => d.amount), [deals]);
 
   return (
     <div className="report-grid">
@@ -419,9 +608,24 @@ function LoansPanel() {
             <XAxis type="number" tickFormatter={formatCompact} tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} axisLine={false} tickLine={false} />
             <YAxis type="category" dataKey="name" width={120} tick={{ fill: AXIS_TICK_COLOR, fontSize: 11 }} axisLine={false} tickLine={false} />
             <ReportTooltip money />
-            <Bar {...CHART_MOTION} activeBar dataKey="value" name="Amount" radius={[0, 6, 6, 0]} maxBarSize={24}>
+            <Bar
+              {...CHART_MOTION}
+              activeBar
+              dataKey="value"
+              name="Amount"
+              radius={[0, 6, 6, 0]}
+              maxBarSize={24}
+              onClick={drill(byBu, (row, i) =>
+                dealDrill(
+                  "Exposure by business unit",
+                  row.name,
+                  deals.filter((d) => d.businessUnit === row.name),
+                  seriesColor(i),
+                ),
+              )}
+            >
               {byBu.map((_, i) => (
-                <Cell key={byBu[i].name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                <Cell key={byBu[i].name} fill={seriesColor(i)} />
               ))}
             </Bar>
           </BarChart>
@@ -431,9 +635,26 @@ function LoansPanel() {
       <ReportCard title="Outstanding by facility status" subtitle="Drawn balances">
         <ResponsiveContainer width="100%" height={300}>
           <PieChart>
-            <Pie {...CHART_MOTION} shape={PieSliceShape} data={byStatus} dataKey="value" nameKey="name" innerRadius={50} outerRadius={95} paddingAngle={2}>
+            <Pie
+              {...CHART_MOTION}
+              shape={PieSliceShape}
+              data={byStatus}
+              dataKey="value"
+              nameKey="name"
+              innerRadius={50}
+              outerRadius={95}
+              paddingAngle={2}
+              onClick={drill(byStatus, (row, i) =>
+                dealDrill(
+                  "Outstanding by facility status",
+                  row.name,
+                  deals.filter((d) => d.facilityStatus === row.name),
+                  seriesColor(i),
+                ),
+              )}
+            >
               {byStatus.map((_, i) => (
-                <Cell key={byStatus[i].name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                <Cell key={byStatus[i].name} fill={seriesColor(i)} />
               ))}
             </Pie>
             <ReportTooltip money />
@@ -450,7 +671,20 @@ function LoansPanel() {
             <YAxis yAxisId="left" tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} axisLine={false} tickLine={false} unit="%" />
             <ReportTooltip />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar {...CHART_MOTION} activeBar yAxisId="left" dataKey="utilization" name="Utilization %" fill={SERIES.crimson} radius={[4, 4, 0, 0]} maxBarSize={36} />
+            <Bar
+              {...CHART_MOTION}
+              activeBar
+              yAxisId="left"
+              dataKey="utilization"
+              name="Utilization %"
+              fill={SERIES.crimson}
+              radius={[4, 4, 0, 0]}
+              maxBarSize={36}
+              onClick={drill(utilization, (row) => {
+                const deal = deals.find((d) => d.id === row.id);
+                return deal ? dealDrill("Utilization vs LTV", deal.name, [deal], SERIES.crimson) : null;
+              })}
+            />
             <Line {...CHART_MOTION} yAxisId="left" type="monotone" dataKey="ltv" name="LTV %" stroke={SERIES.blue} strokeWidth={2} dot={{ r: 4 }} />
           </ComposedChart>
         </ResponsiveContainer>
@@ -459,9 +693,24 @@ function LoansPanel() {
       <ReportCard title="Currency mix" subtitle="Pipeline by booking currency">
         <ResponsiveContainer width="100%" height={300}>
           <PieChart>
-            <Pie {...CHART_MOTION} shape={PieSliceShape} data={currencyMix} dataKey="value" nameKey="name" outerRadius={95}>
+            <Pie
+              {...CHART_MOTION}
+              shape={PieSliceShape}
+              data={currencyMix}
+              dataKey="value"
+              nameKey="name"
+              outerRadius={95}
+              onClick={drill(currencyMix, (row, i) =>
+                dealDrill(
+                  "Currency mix",
+                  row.name,
+                  deals.filter((d) => d.currency === row.name),
+                  seriesColor(i + 1),
+                ),
+              )}
+            >
               {currencyMix.map((_, i) => (
-                <Cell key={currencyMix[i].name} fill={CHART_COLORS[(i + 1) % CHART_COLORS.length]} />
+                <Cell key={currencyMix[i].name} fill={seriesColor(i + 1)} />
               ))}
             </Pie>
             <ReportTooltip money />
@@ -495,6 +744,9 @@ function LoansPanel() {
 }
 
 function ClientsPanel() {
+  const drill = makeDrillHandler(useReportDrill());
+  const deals = usePipelineDeals();
+
   const byRegion = useMemo(() => countBy(accounts, (a) => a.region), []);
   const byIndustry = useMemo(() => countBy(accounts, (a) => a.industry), []);
   const bySegment = useMemo(() => countBy(accounts, (a) => a.segment), []);
@@ -513,7 +765,7 @@ function ClientsPanel() {
       }).length,
       highRisk: accounts.filter((a) => a.segment === seg && a.riskRating === "High").length,
     }));
-  }, []);
+  }, [deals]);
 
   return (
     <div className="report-grid">
@@ -524,9 +776,24 @@ function ClientsPanel() {
             <XAxis dataKey="name" tick={{ fill: AXIS_TICK_COLOR, fontSize: 11 }} axisLine={false} tickLine={false} />
             <YAxis allowDecimals={false} tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} axisLine={false} tickLine={false} />
             <ReportTooltip />
-            <Bar {...CHART_MOTION} activeBar dataKey="value" name="Clients" radius={[6, 6, 0, 0]} maxBarSize={40}>
+            <Bar
+              {...CHART_MOTION}
+              activeBar
+              dataKey="value"
+              name="Clients"
+              radius={[6, 6, 0, 0]}
+              maxBarSize={40}
+              onClick={drill(byRegion, (row, i) =>
+                accountDrill(
+                  "Clients by region",
+                  row.name,
+                  accounts.filter((a) => a.region === row.name),
+                  seriesColor(i),
+                ),
+              )}
+            >
               {byRegion.map((_, i) => (
-                <Cell key={byRegion[i].name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                <Cell key={byRegion[i].name} fill={seriesColor(i)} />
               ))}
             </Bar>
           </BarChart>
@@ -536,9 +803,26 @@ function ClientsPanel() {
       <ReportCard title="KYC status" subtitle="Onboarding health">
         <ResponsiveContainer width="100%" height={280}>
           <PieChart>
-            <Pie {...CHART_MOTION} shape={PieSliceShape} data={byKyc} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={3}>
+            <Pie
+              {...CHART_MOTION}
+              shape={PieSliceShape}
+              data={byKyc}
+              dataKey="value"
+              nameKey="name"
+              innerRadius={55}
+              outerRadius={90}
+              paddingAngle={3}
+              onClick={drill(byKyc, (row, i) =>
+                accountDrill(
+                  "KYC status",
+                  row.name,
+                  accounts.filter((a) => a.kycStatus === row.name),
+                  seriesColor(i),
+                ),
+              )}
+            >
               {byKyc.map((_, i) => (
-                <Cell key={byKyc[i].name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                <Cell key={byKyc[i].name} fill={seriesColor(i)} />
               ))}
             </Pie>
             <ReportTooltip />
@@ -554,7 +838,23 @@ function ClientsPanel() {
             <XAxis type="number" allowDecimals={false} tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} axisLine={false} tickLine={false} />
             <YAxis type="category" dataKey="name" width={150} tick={{ fill: AXIS_TICK_COLOR, fontSize: 11 }} axisLine={false} tickLine={false} />
             <ReportTooltip />
-            <Bar {...CHART_MOTION} activeBar dataKey="value" name="Clients" fill={SERIES.blue} radius={[0, 6, 6, 0]} maxBarSize={18} />
+            <Bar
+              {...CHART_MOTION}
+              activeBar
+              dataKey="value"
+              name="Clients"
+              fill={SERIES.blue}
+              radius={[0, 6, 6, 0]}
+              maxBarSize={18}
+              onClick={drill(byIndustry, (row) =>
+                accountDrill(
+                  "Industry coverage",
+                  row.name,
+                  accounts.filter((a) => a.industry === row.name),
+                  SERIES.blue,
+                ),
+              )}
+            />
           </BarChart>
         </ResponsiveContainer>
       </ReportCard>
@@ -577,12 +877,24 @@ function ClientsPanel() {
       <ReportCard title="Client risk rating" subtitle="Portfolio risk view">
         <ResponsiveContainer width="100%" height={280}>
           <PieChart>
-            <Pie {...CHART_MOTION} shape={PieSliceShape} data={byRisk} dataKey="value" nameKey="name" outerRadius={90}>
+            <Pie
+              {...CHART_MOTION}
+              shape={PieSliceShape}
+              data={byRisk}
+              dataKey="value"
+              nameKey="name"
+              outerRadius={90}
+              onClick={drill(byRisk, (row) =>
+                accountDrill(
+                  "Client risk rating",
+                  `${row.name} risk`,
+                  accounts.filter((a) => a.riskRating === row.name),
+                  riskColor(row.name),
+                ),
+              )}
+            >
               {byRisk.map((d) => (
-                <Cell
-                  key={d.name}
-                  fill={d.name === "High" ? SCALE.high : d.name === "Medium" ? SCALE.medium : SCALE.low}
-                />
+                <Cell key={d.name} fill={riskColor(d.name)} />
               ))}
             </Pie>
             <ReportTooltip />
@@ -598,12 +910,24 @@ function ClientsPanel() {
             <XAxis dataKey="name" tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} axisLine={false} tickLine={false} />
             <YAxis allowDecimals={false} tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} axisLine={false} tickLine={false} />
             <ReportTooltip />
-            <Bar {...CHART_MOTION} activeBar dataKey="value" name="Clients" radius={[6, 6, 0, 0]} maxBarSize={48}>
+            <Bar
+              {...CHART_MOTION}
+              activeBar
+              dataKey="value"
+              name="Clients"
+              radius={[6, 6, 0, 0]}
+              maxBarSize={48}
+              onClick={drill(byRating, (row) =>
+                accountDrill(
+                  "Relationship temperature",
+                  row.name,
+                  accounts.filter((a) => a.rating === row.name),
+                  temperatureColor(row.name),
+                ),
+              )}
+            >
               {byRating.map((d) => (
-                <Cell
-                  key={d.name}
-                  fill={d.name === "Hot" ? SCALE.high : d.name === "Warm" ? SCALE.medium : SCALE.cold}
-                />
+                <Cell key={d.name} fill={temperatureColor(d.name)} />
               ))}
             </Bar>
           </BarChart>
@@ -613,9 +937,26 @@ function ClientsPanel() {
       <ReportCard title="Segment mix" subtitle="Banking franchise split">
         <ResponsiveContainer width="100%" height={280}>
           <PieChart>
-            <Pie {...CHART_MOTION} shape={PieSliceShape} data={bySegment} dataKey="value" nameKey="name" innerRadius={48} outerRadius={90} paddingAngle={2}>
+            <Pie
+              {...CHART_MOTION}
+              shape={PieSliceShape}
+              data={bySegment}
+              dataKey="value"
+              nameKey="name"
+              innerRadius={48}
+              outerRadius={90}
+              paddingAngle={2}
+              onClick={drill(bySegment, (row, i) =>
+                accountDrill(
+                  "Segment mix",
+                  row.name,
+                  accounts.filter((a) => a.segment === row.name),
+                  seriesColor(i),
+                ),
+              )}
+            >
               {bySegment.map((_, i) => (
-                <Cell key={bySegment[i].name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                <Cell key={bySegment[i].name} fill={seriesColor(i)} />
               ))}
             </Pie>
             <ReportTooltip />
@@ -627,7 +968,19 @@ function ClientsPanel() {
   );
 }
 
+function ownerRequest(rows: Deal[], owner: string, color: string) {
+  return dealDrill(
+    "RM book of business",
+    owner,
+    rows.filter((d) => d.owner === owner),
+    color,
+  );
+}
+
 function PipelinePanel() {
+  const drill = makeDrillHandler(useReportDrill());
+  const deals = usePipelineDeals();
+
   const stageFunnel = useMemo(
     () =>
       STAGE_ORDER.map((stage, index) => {
@@ -639,10 +992,10 @@ function PipelinePanel() {
           probability: rows.length
             ? Math.round(rows.reduce((s, d) => s + d.probability, 0) / rows.length)
             : 0,
-          fill: CHART_COLORS[index % CHART_COLORS.length],
+          fill: seriesColor(index),
         };
       }),
-    [],
+    [deals],
   );
 
   const ownerBook = useMemo(() => {
@@ -655,7 +1008,7 @@ function PipelinePanel() {
       map.set(d.owner, cur);
     }
     return [...map.values()].sort((a, b) => b.amount - a.amount);
-  }, []);
+  }, [deals]);
 
   const probabilityBands = useMemo(() => {
     const bands = [
@@ -664,14 +1017,17 @@ function PipelinePanel() {
       { name: "51–75%", min: 51, max: 75 },
       { name: "76–100%", min: 76, max: 100 },
     ];
-    return bands.map((b) => ({
-      name: b.name,
-      amount: deals
-        .filter((d) => d.probability >= b.min && d.probability <= b.max)
-        .reduce((s, d) => s + d.amount, 0),
-      count: deals.filter((d) => d.probability >= b.min && d.probability <= b.max).length,
-    }));
-  }, []);
+    return bands.map((b) => {
+      const rows = deals.filter((d) => d.probability >= b.min && d.probability <= b.max);
+      return {
+        name: b.name,
+        min: b.min,
+        max: b.max,
+        amount: rows.reduce((s, d) => s + d.amount, 0),
+        count: rows.length,
+      };
+    });
+  }, [deals]);
 
   const leadOwner = useMemo(() => countBy(leads, (l) => l.owner), []);
 
@@ -686,7 +1042,23 @@ function PipelinePanel() {
             <YAxis yAxisId="right" orientation="right" tickFormatter={formatCompact} tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} axisLine={false} tickLine={false} />
             <ReportTooltip />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar {...CHART_MOTION} activeBar yAxisId="left" dataKey="count" name="Deals" radius={[6, 6, 0, 0]} maxBarSize={40}>
+            <Bar
+              {...CHART_MOTION}
+              activeBar
+              yAxisId="left"
+              dataKey="count"
+              name="Deals"
+              radius={[6, 6, 0, 0]}
+              maxBarSize={40}
+              onClick={drill(stageFunnel, (row) =>
+                dealDrill(
+                  "Stage funnel",
+                  row.name,
+                  deals.filter((d) => d.stage === row.name),
+                  row.fill,
+                ),
+              )}
+            >
               {stageFunnel.map((d) => (
                 <Cell key={d.name} fill={d.fill} />
               ))}
@@ -722,8 +1094,26 @@ function PipelinePanel() {
             <YAxis tickFormatter={formatCompact} tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} axisLine={false} tickLine={false} />
             <ReportTooltip money />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar {...CHART_MOTION} activeBar dataKey="amount" name="Pipeline" fill={SERIES.crimson} radius={[6, 6, 0, 0]} maxBarSize={40} />
-            <Bar {...CHART_MOTION} activeBar dataKey="weighted" name="Weighted" fill={SERIES.teal} radius={[6, 6, 0, 0]} maxBarSize={40} />
+            <Bar
+              {...CHART_MOTION}
+              activeBar
+              dataKey="amount"
+              name="Pipeline"
+              fill={SERIES.crimson}
+              radius={[6, 6, 0, 0]}
+              maxBarSize={40}
+              onClick={drill(ownerBook, (row) => ownerRequest(deals, row.owner, SERIES.crimson))}
+            />
+            <Bar
+              {...CHART_MOTION}
+              activeBar
+              dataKey="weighted"
+              name="Weighted"
+              fill={SERIES.teal}
+              radius={[6, 6, 0, 0]}
+              maxBarSize={40}
+              onClick={drill(ownerBook, (row) => ownerRequest(deals, row.owner, SERIES.teal))}
+            />
           </ComposedChart>
         </ResponsiveContainer>
       </ReportCard>
@@ -735,9 +1125,24 @@ function PipelinePanel() {
             <XAxis dataKey="name" tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} axisLine={false} tickLine={false} />
             <YAxis tickFormatter={formatCompact} tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} axisLine={false} tickLine={false} />
             <ReportTooltip money />
-            <Bar {...CHART_MOTION} activeBar dataKey="amount" name="Amount" radius={[6, 6, 0, 0]} maxBarSize={48}>
+            <Bar
+              {...CHART_MOTION}
+              activeBar
+              dataKey="amount"
+              name="Amount"
+              radius={[6, 6, 0, 0]}
+              maxBarSize={48}
+              onClick={drill(probabilityBands, (row, i) =>
+                dealDrill(
+                  "Probability bands",
+                  `Win chance ${row.name}`,
+                  deals.filter((d) => d.probability >= row.min && d.probability <= row.max),
+                  seriesColor(i),
+                ),
+              )}
+            >
               {probabilityBands.map((_, i) => (
-                <Cell key={probabilityBands[i].name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                <Cell key={probabilityBands[i].name} fill={seriesColor(i)} />
               ))}
             </Bar>
           </BarChart>
@@ -747,9 +1152,26 @@ function PipelinePanel() {
       <ReportCard title="Lead ownership" subtitle="Leads per RM">
         <ResponsiveContainer width="100%" height={300}>
           <PieChart>
-            <Pie {...CHART_MOTION} shape={PieSliceShape} data={leadOwner} dataKey="value" nameKey="name" innerRadius={50} outerRadius={95} paddingAngle={2}>
+            <Pie
+              {...CHART_MOTION}
+              shape={PieSliceShape}
+              data={leadOwner}
+              dataKey="value"
+              nameKey="name"
+              innerRadius={50}
+              outerRadius={95}
+              paddingAngle={2}
+              onClick={drill(leadOwner, (row, i) =>
+                leadDrill(
+                  "Lead ownership",
+                  row.name,
+                  leads.filter((l) => l.owner === row.name),
+                  seriesColor(i),
+                ),
+              )}
+            >
               {leadOwner.map((_, i) => (
-                <Cell key={leadOwner[i].name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                <Cell key={leadOwner[i].name} fill={seriesColor(i)} />
               ))}
             </Pie>
             <ReportTooltip />
@@ -761,10 +1183,19 @@ function PipelinePanel() {
   );
 }
 
+/** Single-campaign drill for the per-campaign bars, which plot one record per category. */
+function campaignRequest(chart: string, id: string, color: string) {
+  const campaign = campaigns.find((c) => c.id === id);
+  return campaign ? campaignDrill(chart, campaign.name, [campaign], color) : null;
+}
+
 function CampaignsPanel() {
+  const drill = makeDrillHandler(useReportDrill());
+
   const performance = useMemo(
     () =>
       campaigns.map((c) => ({
+        id: c.id,
         name: c.name.length > 22 ? `${c.name.slice(0, 20)}…` : c.name,
         fullName: c.name,
         budget: c.budgetedCost,
@@ -785,6 +1216,7 @@ function CampaignsPanel() {
       campaigns
         .filter((c) => c.leadsGenerated > 0)
         .map((c) => ({
+          id: c.id,
           name: c.code,
           rate: Math.round((c.convertedCount / c.leadsGenerated) * 100),
           leads: c.leadsGenerated,
@@ -803,8 +1235,26 @@ function CampaignsPanel() {
             <YAxis tickFormatter={formatCompact} tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} axisLine={false} tickLine={false} />
             <ReportTooltip money />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar {...CHART_MOTION} activeBar dataKey="budget" name="Budgeted" fill={SERIES.blue} radius={[4, 4, 0, 0]} maxBarSize={28} />
-            <Bar {...CHART_MOTION} activeBar dataKey="actual" name="Actual" fill={SERIES.crimson} radius={[4, 4, 0, 0]} maxBarSize={28} />
+            <Bar
+              {...CHART_MOTION}
+              activeBar
+              dataKey="budget"
+              name="Budgeted"
+              fill={SERIES.blue}
+              radius={[4, 4, 0, 0]}
+              maxBarSize={28}
+              onClick={drill(performance, (row) => campaignRequest("Campaign cost vs budget", row.id, SERIES.blue))}
+            />
+            <Bar
+              {...CHART_MOTION}
+              activeBar
+              dataKey="actual"
+              name="Actual"
+              fill={SERIES.crimson}
+              radius={[4, 4, 0, 0]}
+              maxBarSize={28}
+              onClick={drill(performance, (row) => campaignRequest("Campaign cost vs budget", row.id, SERIES.crimson))}
+            />
           </BarChart>
         </ResponsiveContainer>
       </ReportCard>
@@ -835,7 +1285,18 @@ function CampaignsPanel() {
             <YAxis tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} axisLine={false} tickLine={false} />
             <ReportTooltip />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar {...CHART_MOTION} activeBar dataKey="leads" name="Leads" fill={SERIES.violet} radius={[4, 4, 0, 0]} maxBarSize={32} />
+            <Bar
+              {...CHART_MOTION}
+              activeBar
+              dataKey="leads"
+              name="Leads"
+              fill={SERIES.violet}
+              radius={[4, 4, 0, 0]}
+              maxBarSize={32}
+              onClick={drill(performance, (row) =>
+                campaignRequest("Leads generated vs converted", row.id, SERIES.violet),
+              )}
+            />
             <Line {...CHART_MOTION} type="monotone" dataKey="converted" name="Converted" stroke={SERIES.amber} strokeWidth={2} dot={{ r: 4 }} />
           </ComposedChart>
         </ResponsiveContainer>
@@ -844,9 +1305,26 @@ function CampaignsPanel() {
       <ReportCard title="Channel mix" subtitle="Campaigns by channel">
         <ResponsiveContainer width="100%" height={280}>
           <PieChart>
-            <Pie {...CHART_MOTION} shape={PieSliceShape} data={byChannel} dataKey="value" nameKey="name" innerRadius={48} outerRadius={90} paddingAngle={2}>
+            <Pie
+              {...CHART_MOTION}
+              shape={PieSliceShape}
+              data={byChannel}
+              dataKey="value"
+              nameKey="name"
+              innerRadius={48}
+              outerRadius={90}
+              paddingAngle={2}
+              onClick={drill(byChannel, (row, i) =>
+                campaignDrill(
+                  "Channel mix",
+                  row.name,
+                  campaigns.filter((c) => c.channel === row.name),
+                  seriesColor(i),
+                ),
+              )}
+            >
               {byChannel.map((_, i) => (
-                <Cell key={byChannel[i].name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                <Cell key={byChannel[i].name} fill={seriesColor(i)} />
               ))}
             </Pie>
             <ReportTooltip />
@@ -858,9 +1336,24 @@ function CampaignsPanel() {
       <ReportCard title="Campaign status" subtitle="Lifecycle distribution">
         <ResponsiveContainer width="100%" height={280}>
           <PieChart>
-            <Pie {...CHART_MOTION} shape={PieSliceShape} data={byStatus} dataKey="value" nameKey="name" outerRadius={90}>
+            <Pie
+              {...CHART_MOTION}
+              shape={PieSliceShape}
+              data={byStatus}
+              dataKey="value"
+              nameKey="name"
+              outerRadius={90}
+              onClick={drill(byStatus, (row, i) =>
+                campaignDrill(
+                  "Campaign status",
+                  row.name,
+                  campaigns.filter((c) => c.status === row.name),
+                  seriesColor(i + 3),
+                ),
+              )}
+            >
               {byStatus.map((_, i) => (
-                <Cell key={byStatus[i].name} fill={CHART_COLORS[(i + 3) % CHART_COLORS.length]} />
+                <Cell key={byStatus[i].name} fill={seriesColor(i + 3)} />
               ))}
             </Pie>
             <ReportTooltip />
@@ -876,7 +1369,18 @@ function CampaignsPanel() {
             <XAxis dataKey="name" tick={{ fill: AXIS_TICK_COLOR, fontSize: 11 }} axisLine={false} tickLine={false} />
             <YAxis unit="%" tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} axisLine={false} tickLine={false} />
             <ReportTooltip />
-            <Bar {...CHART_MOTION} activeBar dataKey="rate" name="Conversion %" fill={SERIES.crimson} radius={[6, 6, 0, 0]} maxBarSize={40} />
+            <Bar
+              {...CHART_MOTION}
+              activeBar
+              dataKey="rate"
+              name="Conversion %"
+              fill={SERIES.crimson}
+              radius={[6, 6, 0, 0]}
+              maxBarSize={40}
+              onClick={drill(conversion, (row) =>
+                campaignRequest("Conversion rate by campaign", row.id, SERIES.crimson),
+              )}
+            />
           </BarChart>
         </ResponsiveContainer>
       </ReportCard>
@@ -888,7 +1392,23 @@ function CampaignsPanel() {
             <XAxis type="number" allowDecimals={false} tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} axisLine={false} tickLine={false} />
             <YAxis type="category" dataKey="name" width={130} tick={{ fill: AXIS_TICK_COLOR, fontSize: 11 }} axisLine={false} tickLine={false} />
             <ReportTooltip />
-            <Bar {...CHART_MOTION} activeBar dataKey="value" name="Campaigns" fill={SERIES.amber} radius={[0, 6, 6, 0]} maxBarSize={18} />
+            <Bar
+              {...CHART_MOTION}
+              activeBar
+              dataKey="value"
+              name="Campaigns"
+              fill={SERIES.amber}
+              radius={[0, 6, 6, 0]}
+              maxBarSize={18}
+              onClick={drill(byType, (row) =>
+                campaignDrill(
+                  "Campaign type mix",
+                  row.name,
+                  campaigns.filter((c) => c.type === row.name),
+                  SERIES.amber,
+                ),
+              )}
+            />
           </BarChart>
         </ResponsiveContainer>
       </ReportCard>
@@ -897,6 +1417,8 @@ function CampaignsPanel() {
 }
 
 function ActivityPanel() {
+  const drill = makeDrillHandler(useReportDrill());
+
   const taskStatus = useMemo(() => countBy(tasks, (t) => t.status), []);
   const taskPriority = useMemo(() => countBy(tasks, (t) => t.priority), []);
   const callType = useMemo(() => countBy(calls, (c) => c.type), []);
@@ -950,9 +1472,26 @@ function ActivityPanel() {
       <ReportCard title="Task status" subtitle="Execution health">
         <ResponsiveContainer width="100%" height={280}>
           <PieChart>
-            <Pie {...CHART_MOTION} shape={PieSliceShape} data={taskStatus} dataKey="value" nameKey="name" innerRadius={50} outerRadius={90} paddingAngle={3}>
+            <Pie
+              {...CHART_MOTION}
+              shape={PieSliceShape}
+              data={taskStatus}
+              dataKey="value"
+              nameKey="name"
+              innerRadius={50}
+              outerRadius={90}
+              paddingAngle={3}
+              onClick={drill(taskStatus, (row, i) =>
+                taskDrill(
+                  "Task status",
+                  row.name,
+                  tasks.filter((t) => t.status === row.name),
+                  seriesColor(i),
+                ),
+              )}
+            >
               {taskStatus.map((_, i) => (
-                <Cell key={taskStatus[i].name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                <Cell key={taskStatus[i].name} fill={seriesColor(i)} />
               ))}
             </Pie>
             <ReportTooltip />
@@ -968,12 +1507,24 @@ function ActivityPanel() {
             <XAxis dataKey="name" tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} axisLine={false} tickLine={false} />
             <YAxis allowDecimals={false} tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} axisLine={false} tickLine={false} />
             <ReportTooltip />
-            <Bar {...CHART_MOTION} activeBar dataKey="value" name="Tasks" radius={[6, 6, 0, 0]} maxBarSize={48}>
+            <Bar
+              {...CHART_MOTION}
+              activeBar
+              dataKey="value"
+              name="Tasks"
+              radius={[6, 6, 0, 0]}
+              maxBarSize={48}
+              onClick={drill(taskPriority, (row) =>
+                taskDrill(
+                  "Task priority",
+                  `${row.name} priority`,
+                  tasks.filter((t) => t.priority === row.name),
+                  priorityColor(row.name),
+                ),
+              )}
+            >
               {taskPriority.map((d) => (
-                <Cell
-                  key={d.name}
-                  fill={d.name === "High" ? SCALE.high : d.name === "Normal" ? SCALE.cold : SCALE.low}
-                />
+                <Cell key={d.name} fill={priorityColor(d.name)} />
               ))}
             </Bar>
           </BarChart>
@@ -1001,7 +1552,23 @@ function ActivityPanel() {
             <XAxis type="number" allowDecimals={false} tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} axisLine={false} tickLine={false} />
             <YAxis type="category" dataKey="name" width={70} tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} axisLine={false} tickLine={false} />
             <ReportTooltip />
-            <Bar {...CHART_MOTION} activeBar dataKey="value" name="Meetings" fill={SERIES.violet} radius={[0, 6, 6, 0]} maxBarSize={22} />
+            <Bar
+              {...CHART_MOTION}
+              activeBar
+              dataKey="value"
+              name="Meetings"
+              fill={SERIES.violet}
+              radius={[0, 6, 6, 0]}
+              maxBarSize={22}
+              onClick={drill(meetingOwner, (row) =>
+                meetingDrill(
+                  "Meetings by owner",
+                  row.name,
+                  meetings.filter((m) => m.owner === row.name),
+                  SERIES.violet,
+                ),
+              )}
+            />
           </BarChart>
         </ResponsiveContainer>
       </ReportCard>
@@ -1013,7 +1580,23 @@ function ActivityPanel() {
             <XAxis dataKey="name" interval={0} angle={-15} textAnchor="end" height={50} tick={{ fill: AXIS_TICK_COLOR, fontSize: 10 }} axisLine={false} tickLine={false} />
             <YAxis allowDecimals={false} tick={{ fill: AXIS_TICK_COLOR, fontSize: 12 }} axisLine={false} tickLine={false} />
             <ReportTooltip />
-            <Bar {...CHART_MOTION} activeBar dataKey="value" name="Tasks" fill={SERIES.crimson} radius={[6, 6, 0, 0]} maxBarSize={40} />
+            <Bar
+              {...CHART_MOTION}
+              activeBar
+              dataKey="value"
+              name="Tasks"
+              fill={SERIES.crimson}
+              radius={[6, 6, 0, 0]}
+              maxBarSize={40}
+              onClick={drill(taskAccounts, (row) =>
+                taskDrill(
+                  "Tasks by related account",
+                  row.name,
+                  tasks.filter((t) => (t.account || "Unassigned") === row.name),
+                  SERIES.crimson,
+                ),
+              )}
+            />
           </BarChart>
         </ResponsiveContainer>
       </ReportCard>
@@ -1034,37 +1617,42 @@ export function ReportsWorkspace() {
   const [tab, setTab] = useState<ReportTab>("overview");
 
   return (
-    <div className="reports-page">
-      <header className="reports-header">
-        <div>
-          <h2>Business Reports</h2>
-          <p className="muted">Live analytics from loans, clients, leads, campaigns, and activities.</p>
+    <ReportDrillProvider>
+      <div className="reports-page">
+        <header className="reports-header">
+          <div>
+            <h2>Business Reports</h2>
+            <p className="muted">Live analytics from loans, clients, leads, campaigns, and activities.</p>
+          </div>
+        </header>
+
+        <KpiStrip />
+
+        <div className="reports-toolbar">
+          <div className="reports-tabs" role="tablist" aria-label="Report categories">
+            {TABS.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                role="tab"
+                aria-selected={tab === item.key}
+                className={`reports-tab ${tab === item.key ? "active" : ""}`}
+                onClick={() => startTransition(() => setTab(item.key))}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <p className="reports-drill-hint">Click any bar, slice or ring segment to open the underlying records.</p>
         </div>
-      </header>
 
-      <KpiStrip />
-
-      <div className="reports-tabs" role="tablist" aria-label="Report categories">
-        {TABS.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            role="tab"
-            aria-selected={tab === item.key}
-            className={`reports-tab ${tab === item.key ? "active" : ""}`}
-            onClick={() => startTransition(() => setTab(item.key))}
-          >
-            {item.label}
-          </button>
-        ))}
+        {tab === "overview" && <OverviewPanel />}
+        {tab === "loans" && <LoansPanel />}
+        {tab === "clients" && <ClientsPanel />}
+        {tab === "pipeline" && <PipelinePanel />}
+        {tab === "campaigns" && <CampaignsPanel />}
+        {tab === "activity" && <ActivityPanel />}
       </div>
-
-      {tab === "overview" && <OverviewPanel />}
-      {tab === "loans" && <LoansPanel />}
-      {tab === "clients" && <ClientsPanel />}
-      {tab === "pipeline" && <PipelinePanel />}
-      {tab === "campaigns" && <CampaignsPanel />}
-      {tab === "activity" && <ActivityPanel />}
-    </div>
+    </ReportDrillProvider>
   );
 }

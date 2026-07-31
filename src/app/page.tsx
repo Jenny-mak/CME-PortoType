@@ -53,6 +53,12 @@ import { createPortal } from "react-dom";
 import { AiChatWidget } from "@/components/AiChatWidget";
 import { DateField } from "@/components/DateField";
 import { HomeCalendar, HomeLoansClosing } from "@/components/HomeCalendar";
+import {
+  HomePanelExpandButton,
+  HomePanelHost,
+  useHomePanel,
+  type HomePanelKey,
+} from "@/components/HomePanel";
 import { LoanKanbanBoard, LoanStageBar } from "@/components/LoanKanbanBoard";
 import { LoginPage } from "@/components/LoginPage";
 import { ReportsWorkspace } from "@/components/ReportsWorkspace";
@@ -488,6 +494,8 @@ export default function CRMWorkspace() {
   const [createIntent, setCreateIntent] = useState<{ module: ModuleKey; id: number } | null>(null);
   const [recordIntent, setRecordIntent] = useState<(OpenRecordIntent & { module: ModuleKey }) | null>(null);
   const [moduleReturnHome, setModuleReturnHome] = useState(false);
+  /** Survives leave/return so a fullscreen Home panel can be restored via Back. */
+  const [homeExpandedPanel, setHomeExpandedPanel] = useState<HomePanelKey | null>(null);
   const [moduleTabIntent, setModuleTabIntent] = useState<string | null>(null);
   const [accountsView, setAccountsView] = useState<"All Clients" | "Active Clients">("All Clients");
   const [navToken, setNavToken] = useState(0);
@@ -625,6 +633,9 @@ export default function CRMWorkspace() {
     setWorkspaceView("modules");
     setModuleReturnHome(options?.returnTo === "home");
     setModuleTabIntent(options?.tab ?? null);
+    if (module !== "home" && options?.returnTo !== "home") {
+      setHomeExpandedPanel(null);
+    }
   }
 
   // Sidebar navigation always lands on the module's list view, even when a record
@@ -632,13 +643,14 @@ export default function CRMWorkspace() {
   function navigateFromSidebar(module: ModuleKey) {
     setCreateIntent(null);
     setRecordIntent(null);
+    setHomeExpandedPanel(null);
     setNavToken((token) => token + 1);
     openModule(module);
   }
 
   function openRecord(module: ModuleKey, recordId: string) {
     setCreateIntent(null);
-    openModule(module);
+    openModule(module, { returnTo: "home" });
     setRecordIntent({ module, recordId, id: Date.now(), returnTo: "home" });
   }
 
@@ -743,7 +755,8 @@ export default function CRMWorkspace() {
               <Fragment key={`${activeModule}-${navToken}`}>
                 {activeModule === "home" && (
                   <HomeDashboard
-                    user={sessionUser}
+                    expandedPanel={homeExpandedPanel}
+                    onExpandedPanelChange={setHomeExpandedPanel}
                     onNavigate={openModule}
                     onOpenRecord={openRecord}
                   />
@@ -1316,7 +1329,9 @@ function Topbar({
   const [createOpen, setCreateOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [createQuery, setCreateQuery] = useState("");
-  const [dismissedIds, setDismissedIds] = useState<string[]>([]);
+  const [dismissedSignatures, setDismissedSignatures] = useState<string[]>([]);
+  const [greetingDate, setGreetingDate] = useState(() => formatHomeDate());
+  const [greetingTime, setGreetingTime] = useState(() => formatHomeTime());
   const profileRef = useRef<HTMLDivElement | null>(null);
   const createRef = useRef<HTMLDivElement | null>(null);
   const notificationsRef = useRef<HTMLDivElement | null>(null);
@@ -1329,9 +1344,9 @@ function Topbar({
   const notifications = useMemo(
     () =>
       buildLoanNotifications(getAllPipelineLoans(pipelineSnapshot)).filter(
-        (item) => !dismissedIds.includes(item.id),
+        (item) => !dismissedSignatures.includes(item.signature),
       ),
-    [pipelineSnapshot, dismissedIds],
+    [pipelineSnapshot, dismissedSignatures],
   );
 
   useEffect(() => {
@@ -1350,12 +1365,28 @@ function Topbar({
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, []);
 
+  // Setting the formatted strings lets React bail out on ticks that do not
+  // change the visible label, so the second-level timer stays cheap.
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const now = new Date();
+      setGreetingDate(formatHomeDate(now));
+      setGreetingTime(formatHomeTime(now));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const filteredCreateOptions = createRecordOptions.filter((option) =>
     option.label.toLowerCase().includes(createQuery.trim().toLowerCase()),
   );
 
   return (
     <header className="topbar">
+      <div className="topbar-greeting">
+        <span className="topbar-greeting-name">Hi {user.displayName}</span>
+        <span className="topbar-greeting-date">{greetingDate}</span>
+        <span className="topbar-greeting-time">{greetingTime}</span>
+      </div>
       <div className="topbar-actions">
         <div className="create-menu-anchor" ref={createRef}>
           <button
@@ -1443,8 +1474,8 @@ function Topbar({
                     type="button"
                     className="notifications-clear"
                     onClick={() =>
-                      setDismissedIds((prev) => [
-                        ...new Set([...prev, ...notifications.map((item) => item.id)]),
+                      setDismissedSignatures((prev) => [
+                        ...new Set([...prev, ...notifications.map((item) => item.signature)]),
                       ])
                     }
                   >
@@ -1463,8 +1494,10 @@ function Topbar({
                       className={`notifications-item severity-${notification.severity}`}
                       onClick={() => {
                         onOpenNotification(notification);
-                        setDismissedIds((prev) =>
-                          prev.includes(notification.id) ? prev : [...prev, notification.id],
+                        setDismissedSignatures((prev) =>
+                          prev.includes(notification.signature)
+                            ? prev
+                            : [...prev, notification.signature],
                         );
                         setNotificationsOpen(false);
                       }}
@@ -1658,6 +1691,13 @@ function formatHomeDate(date = new Date()) {
   });
 }
 
+function formatHomeTime(date = new Date()) {
+  return date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 type AttentionItem = {
   id: string;
   recordId: string;
@@ -1667,7 +1707,7 @@ type AttentionItem = {
   module: ModuleKey;
 };
 
-function buildAttentionItems(): AttentionItem[] {
+function buildAttentionItems(limit: number): AttentionItem[] {
   const items: AttentionItem[] = [];
 
   for (const account of accounts) {
@@ -1711,21 +1751,31 @@ function buildAttentionItems(): AttentionItem[] {
   }
 
   const kindOrder = { kyc: 0, lead: 1, client: 2 } as const;
-  return items.sort((a, b) => kindOrder[a.kind] - kindOrder[b.kind]).slice(0, 8);
+  return items.sort((a, b) => kindOrder[a.kind] - kindOrder[b.kind]).slice(0, limit);
 }
 
 function HomeDashboard({
-  user,
+  expandedPanel,
+  onExpandedPanelChange,
   onNavigate,
   onOpenRecord,
 }: {
-  user: PublicUser;
+  expandedPanel: HomePanelKey | null;
+  onExpandedPanelChange: (panel: HomePanelKey | null) => void;
   onNavigate: (module: ModuleKey, options?: { returnTo?: "home"; tab?: string }) => void;
   onOpenRecord: (module: ModuleKey, recordId: string) => void;
 }) {
   const [homeView, setHomeView] = useState<"dashboard" | "training">("dashboard");
-  const dateLabel = formatHomeDate();
-  const attentionItems = useMemo(() => buildAttentionItems(), []);
+  const attentionPanel = useHomePanel(expandedPanel === "attention", (next) =>
+    onExpandedPanelChange(next ? "attention" : null),
+  );
+  const quickAccessPanel = useHomePanel(expandedPanel === "quickAccess", (next) =>
+    onExpandedPanelChange(next ? "quickAccess" : null),
+  );
+  const attentionItems = useMemo(
+    () => buildAttentionItems(attentionPanel.expanded ? 60 : 8),
+    [attentionPanel.expanded],
+  );
   const quickAccessItems = useMemo(() => {
     const kycActions = accounts.filter(
       (account) =>
@@ -1767,75 +1817,116 @@ function HomeDashboard({
 
   return (
     <div className="home-page">
-      <header className="home-banner">
-        <div className="home-banner-copy">
-          <h2 className="home-greeting">Hi {user.displayName}</h2>
-          <span className="home-date">{dateLabel}</span>
-        </div>
-      </header>
       <div className="home-cross">
         <div className="home-cross-col home-cross-left">
-          <section className="home-quad home-quad-left">
-            <div className="home-quad-head">
-              <div className="home-quad-label">Needs attention</div>
-            </div>
-            <div className="home-attention-list">
-              {attentionItems.length === 0 ? (
-                <p className="muted">Nothing needs attention right now.</p>
-              ) : (
-                attentionItems.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={`home-attention-item is-${item.kind}`}
-                    onClick={() => onOpenRecord(item.module, item.recordId)}
-                  >
-                    <span className="home-attention-kind">
-                      {item.kind === "kyc" ? "KYC" : item.kind === "lead" ? "Lead" : "Client"}
-                    </span>
-                    <span className="home-attention-body">
-                      <strong>{item.title}</strong>
-                      <span className="muted">{item.detail}</span>
-                    </span>
-                  </button>
-                ))
-              )}
-            </div>
-          </section>
-          <HomeLoansClosing onNavigate={onNavigate} onOpenRecord={onOpenRecord} />
+          <HomePanelHost expanded={attentionPanel.expanded} onExit={attentionPanel.exit}>
+            <section className={`home-quad home-quad-left${attentionPanel.modifier}`}>
+              <div className="home-quad-head">
+                <div className="home-quad-label">Needs attention</div>
+                <div className="home-quad-actions">
+                  <span className="home-quad-meta">{attentionItems.length} items</span>
+                  <HomePanelExpandButton
+                    expanded={attentionPanel.expanded}
+                    label="Needs attention"
+                    onToggle={attentionPanel.toggle}
+                  />
+                </div>
+              </div>
+              <div className="home-attention-list">
+                {attentionItems.length === 0 ? (
+                  <p className="muted">Nothing needs attention right now.</p>
+                ) : (
+                  attentionItems.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`home-attention-item is-${item.kind}`}
+                      onClick={() => onOpenRecord(item.module, item.recordId)}
+                    >
+                      <span className="home-attention-kind">
+                        {item.kind === "kyc" ? "KYC" : item.kind === "lead" ? "Lead" : "Client"}
+                      </span>
+                      <span className="home-attention-body">
+                        <strong>{item.title}</strong>
+                        <span className="muted">{item.detail}</span>
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </section>
+          </HomePanelHost>
+          <HomeLoansClosing
+            expanded={expandedPanel === "loans"}
+            onExpandedChange={(next) => onExpandedPanelChange(next ? "loans" : null)}
+            onNavigate={onNavigate}
+            onOpenRecord={onOpenRecord}
+          />
         </div>
         <div className="home-cross-col home-cross-right">
-          <HomeCalendar onNavigate={onNavigate} onOpenRecord={onOpenRecord} />
-          <section className="home-quad home-quad-br home-quick-access" aria-labelledby="home-quick-access-title">
-            <div className="home-quick-access-head">
-              <div className="home-quad-label" id="home-quick-access-title">Quick access</div>
-            </div>
-            <div className="home-quick-access-list">
-              <button
-                className="home-quick-access-item is-training"
-                type="button"
-                title="Training · 8 video courses"
-                onClick={() => setHomeView("training")}
-              >
-                <span className="home-quick-access-icon">
-                  <Play size={18} strokeWidth={1.6} />
-                </span>
-                <span className="home-quick-access-label">Training</span>
-              </button>
-              {quickAccessItems.map((module) => (
+          <HomeCalendar
+            expanded={expandedPanel === "calendar"}
+            onExpandedChange={(next) => onExpandedPanelChange(next ? "calendar" : null)}
+            onNavigate={onNavigate}
+            onOpenRecord={onOpenRecord}
+          />
+          <HomePanelHost expanded={quickAccessPanel.expanded} onExit={quickAccessPanel.exit}>
+            <section
+              className={`home-quad home-quad-br home-quick-access${quickAccessPanel.modifier}`}
+              aria-labelledby="home-quick-access-title"
+            >
+              <div className="home-quad-head">
+                <div className="home-quad-label" id="home-quick-access-title">
+                  Quick access
+                </div>
+                <div className="home-quad-actions">
+                  <HomePanelExpandButton
+                    expanded={quickAccessPanel.expanded}
+                    label="Quick access"
+                    onToggle={quickAccessPanel.toggle}
+                  />
+                </div>
+              </div>
+              <div className="home-quick-access-list">
                 <button
-                  className="home-quick-access-item"
-                  key={module.key}
-                  title={`${module.title ?? module.label} · ${module.description}`}
-                  onClick={() => onNavigate(module.key)}
+                  className="home-quick-access-item is-training"
                   type="button"
+                  title="Training · 8 video courses"
+                  onClick={() => {
+                    onExpandedPanelChange(null);
+                    setHomeView("training");
+                  }}
                 >
-                  <span className="home-quick-access-icon">{moduleIcons[module.key]}</span>
-                  <span className="home-quick-access-label">{module.label}</span>
+                  <span className="home-quick-access-icon">
+                    <Play size={18} strokeWidth={1.6} />
+                  </span>
+                  <span className="home-quick-access-text">
+                    <span className="home-quick-access-label">Training</span>
+                    {quickAccessPanel.expanded && (
+                      <span className="home-quick-access-desc">8 video courses</span>
+                    )}
+                  </span>
                 </button>
-              ))}
-            </div>
-          </section>
+                {quickAccessItems.map((module) => (
+                  <button
+                    className="home-quick-access-item"
+                    key={module.key}
+                    title={`${module.title ?? module.label} · ${module.description}`}
+                    onClick={() => onNavigate(module.key, { returnTo: "home" })}
+                    type="button"
+                  >
+                    <span className="home-quick-access-icon">{moduleIcons[module.key]}</span>
+                    <span className="home-quick-access-text">
+                      <span className="home-quick-access-label">{module.label}</span>
+                      {quickAccessPanel.expanded && (
+                        <span className="home-quick-access-desc">{module.description}</span>
+                      )}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          </HomePanelHost>
         </div>
       </div>
     </div>

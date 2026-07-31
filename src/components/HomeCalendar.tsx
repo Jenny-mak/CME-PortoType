@@ -1,8 +1,16 @@
 "use client";
 
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, Mail, Phone, Plus, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type RefObject,
+} from "react";
 import { createPortal } from "react-dom";
+import { HomePanelExpandButton, HomePanelHost, useHomePanel } from "@/components/HomePanel";
 import { calls as seedCalls, meetings as seedMeetings, tasks as seedTasks } from "@/lib/crm-data";
 import { getHoliday } from "@/lib/holidays";
 import { getPipelineLoansSnapshot, subscribePipelineLoans } from "@/lib/pipeline-loans";
@@ -419,18 +427,76 @@ function CalendarEventChip({
   );
 }
 
-const CELL_VISIBLE_EVENTS = 2;
+/** Matches .home-cal-event padding + font-size line box. */
+const EVENT_CHIP_HEIGHT = 15;
+/** Matches .home-cal-more height. */
+const MORE_CONTROL_HEIGHT = 12;
+/** Fallback before the cell has been measured. */
+const CELL_VISIBLE_EVENTS_FALLBACK = 2;
+
+function useEventCapacity(
+  cellRef: RefObject<HTMLElement | null>,
+  totalEvents: number,
+  chipGap: number,
+) {
+  const [capacity, setCapacity] = useState(CELL_VISIBLE_EVENTS_FALLBACK);
+
+  useEffect(() => {
+    const cell = cellRef.current;
+    if (!cell) return;
+
+    function measure() {
+      if (!cell) return;
+      const style = getComputedStyle(cell);
+      const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+      const cellGap = parseFloat(style.rowGap || style.gap) || 0;
+      const head = cell.querySelector<HTMLElement>(
+        ":scope > .home-cal-day-head, :scope > .home-cal-week-day-head",
+      );
+      const holiday = cell.querySelector<HTMLElement>(":scope > .home-cal-holiday-name");
+      const headH = head?.offsetHeight ?? 0;
+      const holidayH = holiday?.offsetHeight ?? 0;
+      // Gaps between head → (holiday) → events area.
+      const gapsBeforeEvents = (holidayH > 0 ? 2 : 1) * cellGap;
+      const available = cell.clientHeight - padY - headH - holidayH - gapsBeforeEvents;
+      const slot = EVENT_CHIP_HEIGHT + chipGap;
+      if (slot <= 0 || available <= 0) {
+        setCapacity(0);
+        return;
+      }
+
+      const fitWithoutMore = Math.floor((available + chipGap) / slot);
+      if (totalEvents <= fitWithoutMore) {
+        setCapacity(Math.max(totalEvents, fitWithoutMore));
+        return;
+      }
+
+      // +N sits below the chips and steals one cell gap + its own height.
+      const availableWithMore = available - MORE_CONTROL_HEIGHT - cellGap;
+      setCapacity(Math.max(0, Math.floor((availableWithMore + chipGap) / slot)));
+    }
+
+    const observer = new ResizeObserver(measure);
+    observer.observe(cell);
+    measure();
+    return () => observer.disconnect();
+  }, [totalEvents, chipGap]);
+
+  return capacity;
+}
 
 function DayOverflowMore({
   dateLabel,
   events,
   todayKey,
+  visibleCount,
   overflowOverdue = 0,
   onOpenEvent,
 }: {
   dateLabel: string;
   events: CalendarEvent[];
   todayKey: string;
+  visibleCount: number;
   overflowOverdue?: number;
   onOpenEvent: (event: CalendarEvent) => void;
 }) {
@@ -438,7 +504,7 @@ function DayOverflowMore({
   const panelRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number; place: "below" | "above" } | null>(null);
-  const overflow = Math.max(0, events.length - CELL_VISIBLE_EVENTS);
+  const overflow = Math.max(0, events.length - visibleCount);
 
   useEffect(() => {
     if (!open) return;
@@ -631,12 +697,17 @@ function urgencyLabel(event: CalendarEvent, todayKey: string, viewingToday: bool
 }
 
 export function HomeLoansClosing({
+  expanded,
+  onExpandedChange,
   onNavigate,
   onOpenRecord,
 }: {
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
   onNavigate?: (module: ModuleKey, options?: { returnTo?: "home"; tab?: string }) => void;
   onOpenRecord?: (module: ModuleKey, recordId: string) => void;
 }) {
+  const panel = useHomePanel(expanded, onExpandedChange);
   const today = useMemo(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -672,59 +743,69 @@ export function HomeLoansClosing({
   }, [monthLoans]);
 
   return (
-    <section className="home-quad home-quad-bl">
-      <div className="home-quad-head">
-        <div className="home-quad-label">Loans closing</div>
-        {onNavigate && (
-          <button
-            type="button"
-            className="home-cal-link"
-            onClick={() => onNavigate("deals", { returnTo: "home", tab: "Kanban" })}
-          >
-            Open board
-          </button>
-        )}
-      </div>
-      <div className="home-pipeline-summary">
-        <strong>{monthLoans.length}</strong>
-        <span className="muted">this month</span>
-        <strong className="home-pipeline-amount">{formatLoanAmount(pipelineSummary.totalAmount)}</strong>
-        {pipelineSummary.stages.map((item) => (
-          <span key={item.stage} className="home-pipeline-stage">
-            {item.stage.split(" ")[0]} · {item.count}
-          </span>
-        ))}
-      </div>
-      <div className="home-pipeline-list">
-        {monthLoans.length === 0 ? (
-          <p className="muted">No loans closing this month.</p>
-        ) : (
-          monthLoans.slice(0, 6).map((deal) => (
-            <button
-              key={deal.id}
-              type="button"
-              className="home-pipeline-item"
-              onClick={() => onOpenRecord?.("deals", deal.id)}
-            >
-              <strong>{deal.name}</strong>
-              <span className="muted">
-                {deal.closingDate.slice(5)} · {deal.stage}
-              </span>
-              <span className="home-pipeline-item-amount">{formatLoanAmount(deal.amount)}</span>
-            </button>
-          ))
-        )}
-      </div>
-    </section>
+    <HomePanelHost expanded={panel.expanded} onExit={panel.exit}>
+      <section className={`home-quad home-quad-bl${panel.modifier}`}>
+        <div className="home-quad-head">
+          <div className="home-quad-label">Loans closing</div>
+          <div className="home-quad-actions">
+            {onNavigate && (
+              <button
+                type="button"
+                className="home-cal-link"
+                onClick={() => onNavigate("deals", { returnTo: "home", tab: "Kanban" })}
+              >
+                Open board
+              </button>
+            )}
+            <HomePanelExpandButton expanded={panel.expanded} label="Loans closing" onToggle={panel.toggle} />
+          </div>
+        </div>
+        <div className="home-pipeline-summary">
+          <strong>{monthLoans.length}</strong>
+          <span className="muted">this month</span>
+          <strong className="home-pipeline-amount">{formatLoanAmount(pipelineSummary.totalAmount)}</strong>
+          {pipelineSummary.stages.map((item) => (
+            <span key={item.stage} className="home-pipeline-stage">
+              {item.stage.split(" ")[0]} · {item.count}
+            </span>
+          ))}
+        </div>
+        <div className="home-pipeline-list">
+          {monthLoans.length === 0 ? (
+            <p className="muted">No loans closing this month.</p>
+          ) : (
+            (panel.expanded ? monthLoans : monthLoans.slice(0, 6)).map((deal) => (
+              <button
+                key={deal.id}
+                type="button"
+                className={`home-pipeline-item is-${deal.stage.toLowerCase()}`}
+                onClick={() => onOpenRecord?.("deals", deal.id)}
+              >
+                <strong>{deal.name}</strong>
+                <span className="muted">
+                  {deal.closingDate.slice(5)} · {deal.stage}
+                </span>
+                <span className="home-pipeline-item-amount">{formatLoanAmount(deal.amount)}</span>
+              </button>
+            ))
+          )}
+        </div>
+      </section>
+    </HomePanelHost>
   );
 }
 
 export function HomeCalendar({
+  expanded,
+  onExpandedChange,
   onOpenRecord,
 }: {
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
   onNavigate?: (module: ModuleKey) => void;
   onOpenRecord?: (module: ModuleKey, recordId: string) => void;
 }) {
+  const panel = useHomePanel(expanded, onExpandedChange);
   const today = useMemo(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -892,101 +973,108 @@ export function HomeCalendar({
 
   return (
     <>
-      <section className="home-quad home-quad-tr home-calendar">
-        <div className="home-quad-label home-calendar-section-label">My Calendar</div>
-        <div className="home-calendar-head">
-          <div className="home-calendar-controls">
-            <div className="home-calendar-picker" ref={pickerRef}>
-              <button
-                ref={pickerTriggerRef}
-                type="button"
-                className={`home-calendar-picker-trigger${pickerOpen ? " is-open" : ""}`}
-                aria-label="Open date picker"
-                aria-expanded={pickerOpen}
-                onClick={() => {
-                  setPickerOpen((open) => {
-                    if (!open) updatePickerPosition();
-                    return !open;
-                  });
-                }}
-              >
-                <CalendarDays size={15} strokeWidth={1.75} />
-              </button>
-              {pickerOpen &&
-                typeof document !== "undefined" &&
-                createPortal(
-                  <div
-                    ref={pickerPopoverRef}
-                    className="home-cal-nav-popover-portal"
-                    style={{ top: pickerPos.top, left: pickerPos.left }}
-                  >
-                    <CalendarNavPicker mode={view} cursor={cursor} onSelect={applyCursor} />
-                  </div>,
-                  document.body,
-                )}
+      <HomePanelHost expanded={panel.expanded} onExit={panel.exit}>
+        <section className={`home-quad home-quad-tr home-calendar${panel.modifier}`}>
+          <div className="home-quad-head home-calendar-section-head">
+            <div className="home-quad-label home-calendar-section-label">My Calendar</div>
+            <div className="home-quad-actions">
+              <HomePanelExpandButton expanded={panel.expanded} label="My Calendar" onToggle={panel.toggle} />
             </div>
-            <h3 className="home-calendar-title">{title}</h3>
-            <button type="button" className="secondary-button home-calendar-today" onClick={goToday}>
-              Today
-            </button>
           </div>
-          <div className="home-calendar-views" role="tablist" aria-label="Calendar view">
-            {(
-              [
-                ["day", "Day"],
-                ["week", "Week"],
-                ["month", "Month"],
-              ] as const
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                role="tab"
-                aria-selected={view === key}
-                className={`home-calendar-view-tab${view === key ? " is-active" : ""}`}
-                onClick={() => {
-                  setView(key);
-                  setPickerOpen(false);
-                }}
-              >
-                {label}
+          <div className="home-calendar-head">
+            <div className="home-calendar-controls">
+              <div className="home-calendar-picker" ref={pickerRef}>
+                <button
+                  ref={pickerTriggerRef}
+                  type="button"
+                  className={`home-calendar-picker-trigger${pickerOpen ? " is-open" : ""}`}
+                  aria-label="Open date picker"
+                  aria-expanded={pickerOpen}
+                  onClick={() => {
+                    setPickerOpen((open) => {
+                      if (!open) updatePickerPosition();
+                      return !open;
+                    });
+                  }}
+                >
+                  <CalendarDays size={15} strokeWidth={1.75} />
+                </button>
+                {pickerOpen &&
+                  typeof document !== "undefined" &&
+                  createPortal(
+                    <div
+                      ref={pickerPopoverRef}
+                      className="home-cal-nav-popover-portal"
+                      style={{ top: pickerPos.top, left: pickerPos.left }}
+                    >
+                      <CalendarNavPicker mode={view} cursor={cursor} onSelect={applyCursor} />
+                    </div>,
+                    document.body,
+                  )}
+              </div>
+              <h3 className="home-calendar-title">{title}</h3>
+              <button type="button" className="secondary-button home-calendar-today" onClick={goToday}>
+                Today
               </button>
-            ))}
+            </div>
+            <div className="home-calendar-views" role="tablist" aria-label="Calendar view">
+              {(
+                [
+                  ["day", "Day"],
+                  ["week", "Week"],
+                  ["month", "Month"],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={view === key}
+                  className={`home-calendar-view-tab${view === key ? " is-active" : ""}`}
+                  onClick={() => {
+                    setView(key);
+                    setPickerOpen(false);
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
 
-        {view === "month" && (
-          <MonthView
-            year={cursor.getFullYear()}
-            month={cursor.getMonth()}
-            today={today}
-            selected={cursor}
-            eventsByDate={eventsByDate}
-            onSelectDay={selectDay}
-            onOpenEvent={openEvent}
-          />
-        )}
+          {view === "month" && (
+            <MonthView
+              year={cursor.getFullYear()}
+              month={cursor.getMonth()}
+              today={today}
+              selected={cursor}
+              eventsByDate={eventsByDate}
+              onSelectDay={selectDay}
+              onOpenEvent={openEvent}
+            />
+          )}
 
-        {view === "week" && (
-          <WeekView
-            cursor={cursor}
-            today={today}
-            eventsByDate={eventsByDate}
-            onSelectDay={selectDay}
-            onOpenEvent={openEvent}
-          />
-        )}
+          {view === "week" && (
+            <WeekView
+              cursor={cursor}
+              today={today}
+              eventsByDate={eventsByDate}
+              onSelectDay={selectDay}
+              onOpenEvent={openEvent}
+            />
+          )}
 
-        {view === "day" && (
-          <DayView
-            date={cursor}
-            today={today}
-            events={dayEvents}
-            onOpenEvent={openEvent}
-            onCreate={(kind) => startCreate(kind, cursor)}
-          />
-        )}
-      </section>
+          {view === "day" && (
+            <DayView
+              date={cursor}
+              today={today}
+              events={dayEvents}
+              onOpenEvent={openEvent}
+              onCreate={(kind) => startCreate(kind, cursor)}
+            />
+          )}
+        </section>
+      </HomePanelHost>
 
       {typeof document !== "undefined" &&
         createPortal(
@@ -1301,6 +1389,86 @@ function CalendarNavPicker({
   );
 }
 
+function MonthDayCell({
+  cell,
+  today,
+  selected,
+  dayEvents,
+  todayKey,
+  onSelectDay,
+  onOpenEvent,
+}: {
+  cell: { date: Date; inMonth: boolean };
+  today: Date;
+  selected: Date;
+  dayEvents: CalendarEvent[];
+  todayKey: string;
+  onSelectDay: (date: Date) => void;
+  onOpenEvent: (event: CalendarEvent) => void;
+}) {
+  const cellRef = useRef<HTMLButtonElement>(null);
+  const capacity = useEventCapacity(cellRef, dayEvents.length, 2);
+  const visible = dayEvents.slice(0, capacity);
+  const overflowOverdue = dayEvents
+    .slice(capacity)
+    .filter((event) => eventUrgency(event, todayKey) === "overdue").length;
+  const key = toDateKey(cell.date);
+  const isToday = sameDay(cell.date, today);
+  const isSelected = sameDay(cell.date, selected);
+  const weekend = isWeekend(cell.date);
+  const holiday = getHoliday(key);
+  const holidayLabel = holiday && !weekend ? holiday.shortName : null;
+  const hasOverdue = dayEvents.some((event) => eventUrgency(event, todayKey) === "overdue");
+
+  return (
+    <button
+      ref={cellRef}
+      type="button"
+      className={[
+        "home-cal-day",
+        cell.inMonth ? "" : "is-outside",
+        isToday ? "is-today" : "",
+        isSelected ? "is-selected" : "",
+        weekend ? "is-weekend" : "",
+        holiday ? "is-holiday" : "",
+        dayEvents.length ? "has-events" : "",
+        hasOverdue ? "has-overdue" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      onClick={() => onSelectDay(cell.date)}
+    >
+      <div className="home-cal-day-head">
+        {holidayLabel && holiday ? (
+          <span className="home-cal-holiday-name">
+            <span className="home-cal-holiday-label">{holidayLabel}</span>
+            <span className="home-cal-holiday-tooltip">{holiday.name}</span>
+          </span>
+        ) : null}
+        <span className="home-cal-day-num">{cell.date.getDate()}</span>
+      </div>
+      <div className="home-cal-day-events">
+        {visible.map((event) => (
+          <CalendarEventChip
+            key={`${event.kind}-${event.id}`}
+            event={event}
+            todayKey={todayKey}
+            onOpenEvent={onOpenEvent}
+          />
+        ))}
+      </div>
+      <DayOverflowMore
+        dateLabel={formatCreateDateLabel(cell.date)}
+        events={dayEvents}
+        todayKey={todayKey}
+        visibleCount={capacity}
+        overflowOverdue={overflowOverdue}
+        onOpenEvent={onOpenEvent}
+      />
+    </button>
+  );
+}
+
 function MonthView({
   year,
   month,
@@ -1334,67 +1502,100 @@ function MonthView({
         {cells.map((cell) => {
           const key = toDateKey(cell.date);
           const dayEvents = sortEventsByUrgency(eventsByDate.get(key) ?? [], todayKey);
-          const isToday = sameDay(cell.date, today);
-          const isSelected = sameDay(cell.date, selected);
-          const weekend = isWeekend(cell.date);
-          const holiday = getHoliday(key);
-          const holidayLabel = holiday && !weekend ? holiday.shortName : null;
-          const overdueCount = dayEvents.filter((event) => eventUrgency(event, todayKey) === "overdue").length;
-          const hasOverdue = overdueCount > 0;
-          const visible = dayEvents.slice(0, CELL_VISIBLE_EVENTS);
-          const overflowOverdue = dayEvents
-            .slice(CELL_VISIBLE_EVENTS)
-            .filter((event) => eventUrgency(event, todayKey) === "overdue").length;
-
           return (
-            <button
+            <MonthDayCell
               key={key}
-              type="button"
-              className={[
-                "home-cal-day",
-                cell.inMonth ? "" : "is-outside",
-                isToday ? "is-today" : "",
-                isSelected ? "is-selected" : "",
-                weekend ? "is-weekend" : "",
-                holiday ? "is-holiday" : "",
-                dayEvents.length ? "has-events" : "",
-                hasOverdue ? "has-overdue" : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              onClick={() => onSelectDay(cell.date)}
-            >
-              <div className="home-cal-day-head">
-                {holidayLabel && holiday ? (
-                  <span className="home-cal-holiday-name">
-                    <span className="home-cal-holiday-label">{holidayLabel}</span>
-                    <span className="home-cal-holiday-tooltip">{holiday.name}</span>
-                  </span>
-                ) : null}
-                <span className="home-cal-day-num">{cell.date.getDate()}</span>
-              </div>
-              <div className="home-cal-day-events">
-                {visible.map((event) => (
-                  <CalendarEventChip
-                    key={`${event.kind}-${event.id}`}
-                    event={event}
-                    todayKey={todayKey}
-                    onOpenEvent={onOpenEvent}
-                  />
-                ))}
-              </div>
-              <DayOverflowMore
-                dateLabel={formatCreateDateLabel(cell.date)}
-                events={dayEvents}
-                todayKey={todayKey}
-                overflowOverdue={overflowOverdue}
-                onOpenEvent={onOpenEvent}
-              />
-            </button>
+              cell={cell}
+              today={today}
+              selected={selected}
+              dayEvents={dayEvents}
+              todayKey={todayKey}
+              onSelectDay={onSelectDay}
+              onOpenEvent={onOpenEvent}
+            />
           );
         })}
       </div>
     </div>
+  );
+}
+
+function WeekDayCell({
+  date,
+  today,
+  selected,
+  dayEvents,
+  todayKey,
+  onSelectDay,
+  onOpenEvent,
+}: {
+  date: Date;
+  today: Date;
+  selected: Date;
+  dayEvents: CalendarEvent[];
+  todayKey: string;
+  onSelectDay: (date: Date) => void;
+  onOpenEvent: (event: CalendarEvent) => void;
+}) {
+  const cellRef = useRef<HTMLButtonElement>(null);
+  const capacity = useEventCapacity(cellRef, dayEvents.length, 3);
+  const visible = dayEvents.slice(0, capacity);
+  const overflowOverdue = dayEvents
+    .slice(capacity)
+    .filter((event) => eventUrgency(event, todayKey) === "overdue").length;
+  const key = toDateKey(date);
+  const isToday = sameDay(date, today);
+  const isSelected = sameDay(date, selected);
+  const weekend = isWeekend(date);
+  const holiday = getHoliday(key);
+  const holidayLabel = holiday && !weekend ? holiday.shortName : null;
+  const hasOverdue = dayHasOverdue(dayEvents, todayKey);
+
+  return (
+    <button
+      ref={cellRef}
+      type="button"
+      className={[
+        "home-cal-week-day",
+        isToday ? "is-today" : "",
+        isSelected ? "is-selected" : "",
+        hasOverdue ? "has-overdue" : "",
+        weekend ? "is-weekend" : "",
+        holiday ? "is-holiday" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      onClick={() => onSelectDay(date)}
+    >
+      <div className="home-cal-week-day-head">
+        <span className="home-cal-week-weekday">{WEEKDAYS[(date.getDay() + 6) % 7]}</span>
+        <span className="home-cal-week-day-num">{date.getDate()}</span>
+      </div>
+      {holidayLabel && holiday ? (
+        <span className="home-cal-holiday-name">
+          <span className="home-cal-holiday-label">{holidayLabel}</span>
+          <span className="home-cal-holiday-tooltip">{holiday.name}</span>
+        </span>
+      ) : null}
+      <div className="home-cal-week-day-events">
+        {visible.map((event) => (
+          <CalendarEventChip
+            key={`${event.kind}-${event.id}`}
+            event={event}
+            todayKey={todayKey}
+            onOpenEvent={onOpenEvent}
+          />
+        ))}
+      </div>
+      <DayOverflowMore
+        dateLabel={formatCreateDateLabel(date)}
+        events={dayEvents}
+        todayKey={todayKey}
+        visibleCount={capacity}
+        overflowOverdue={overflowOverdue}
+        onOpenEvent={onOpenEvent}
+      />
+    </button>
   );
 }
 
@@ -1423,61 +1624,17 @@ function WeekView({
         {days.map((date) => {
           const key = toDateKey(date);
           const dayEvents = sortEventsByUrgency(eventsByDate.get(key) ?? [], todayKey);
-          const isToday = sameDay(date, today);
-          const isSelected = sameDay(date, cursor);
-          const weekend = isWeekend(date);
-          const holiday = getHoliday(key);
-          const holidayLabel = holiday && !weekend ? holiday.shortName : null;
-          const hasOverdue = dayHasOverdue(dayEvents, todayKey);
-          const visible = dayEvents.slice(0, CELL_VISIBLE_EVENTS);
-          const overflowOverdue = dayEvents
-            .slice(CELL_VISIBLE_EVENTS)
-            .filter((event) => eventUrgency(event, todayKey) === "overdue").length;
-
           return (
-            <button
+            <WeekDayCell
               key={key}
-              type="button"
-              className={[
-                "home-cal-week-day",
-                isToday ? "is-today" : "",
-                isSelected ? "is-selected" : "",
-                hasOverdue ? "has-overdue" : "",
-                weekend ? "is-weekend" : "",
-                holiday ? "is-holiday" : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              onClick={() => onSelectDay(date)}
-            >
-              <div className="home-cal-week-day-head">
-                <span className="home-cal-week-weekday">{WEEKDAYS[(date.getDay() + 6) % 7]}</span>
-                <span className="home-cal-week-day-num">{date.getDate()}</span>
-              </div>
-              {holidayLabel && holiday ? (
-                <span className="home-cal-holiday-name">
-                  <span className="home-cal-holiday-label">{holidayLabel}</span>
-                  <span className="home-cal-holiday-tooltip">{holiday.name}</span>
-                </span>
-              ) : null}
-              <div className="home-cal-week-day-events">
-                {visible.map((event) => (
-                  <CalendarEventChip
-                    key={`${event.kind}-${event.id}`}
-                    event={event}
-                    todayKey={todayKey}
-                    onOpenEvent={onOpenEvent}
-                  />
-                ))}
-              </div>
-              <DayOverflowMore
-                dateLabel={formatCreateDateLabel(date)}
-                events={dayEvents}
-                todayKey={todayKey}
-                overflowOverdue={overflowOverdue}
-                onOpenEvent={onOpenEvent}
-              />
-            </button>
+              date={date}
+              today={today}
+              selected={cursor}
+              dayEvents={dayEvents}
+              todayKey={todayKey}
+              onSelectDay={onSelectDay}
+              onOpenEvent={onOpenEvent}
+            />
           );
         })}
       </div>

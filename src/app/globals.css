@@ -781,12 +781,58 @@ html[data-mode="night"] .date-picker-popover {
   display: flex;
   gap: 16px;
   height: 46px;
-  justify-content: flex-end;
+  justify-content: space-between;
   overflow: visible;
   padding: 0 18px;
   position: sticky;
   top: 0;
   z-index: 8;
+}
+
+.topbar-greeting {
+  align-items: baseline;
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.topbar-greeting-name {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-greeting-date {
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.topbar-greeting-time {
+  align-items: baseline;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  gap: 10px;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.topbar-greeting-time::before {
+  color: var(--line);
+  content: "|";
+  font-weight: 400;
 }
 
 .topbar-actions {
@@ -1663,24 +1709,6 @@ html[data-mode="night"] .mode-toggle {
   min-height: 0;
 }
 
-.home-banner {
-  align-items: baseline;
-  display: flex;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  gap: 6px 10px;
-  min-width: 0;
-  padding: 2px 4px 0;
-}
-
-.home-banner-copy {
-  align-items: baseline;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 14px;
-  min-width: 0;
-}
-
 .home-quick-access-item.is-training .home-quick-access-label {
   color: var(--brand);
 }
@@ -1695,21 +1723,12 @@ html[data-mode="night"] .home-quick-access-item.is-training .home-quick-access-l
   min-width: 0;
 }
 
-.home-quick-access-head {
-  align-items: baseline;
-  display: flex;
-  gap: 8px;
-  justify-content: space-between;
-  margin-bottom: 8px;
-  min-width: 0;
-}
-
 .home-quick-access-list {
   display: grid;
   flex: 1;
-  gap: 5px;
-  grid-auto-rows: max-content;
-  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 6px;
+  grid-auto-rows: minmax(34px, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   min-height: 0;
   overflow: auto;
   /* Room for hover lift (translateY -1px) + border so first/last row aren't clipped */
@@ -1725,10 +1744,10 @@ html[data-mode="night"] .home-quick-access-item.is-training .home-quick-access-l
   color: var(--text);
   cursor: pointer;
   display: grid;
-  gap: 6px;
-  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 8px;
+  grid-template-columns: 22px minmax(0, 1fr);
   min-width: 0;
-  padding: 4px 7px;
+  padding: 5px 8px;
   text-align: left;
   transition:
     background 0.15s ease,
@@ -1754,23 +1773,66 @@ html[data-mode="night"] .home-quick-access-item.is-training .home-quick-access-l
   border-radius: 6px;
   color: var(--brand);
   display: flex;
-  height: 20px;
+  height: 22px;
   justify-content: center;
-  width: 20px;
+  width: 22px;
 }
 
 /* Icons are authored at 18px; scale them down to fit the compact chip. */
 .home-quick-access-icon svg {
-  height: 14px;
-  width: 14px;
+  height: 15px;
+  width: 15px;
+}
+
+.home-quick-access-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
 }
 
 .home-quick-access-label {
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.home-quick-access-desc {
+  color: var(--muted);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-quick-access.is-fullscreen .home-quick-access-list {
+  align-content: start;
+  gap: 10px;
+  grid-auto-rows: max-content;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+}
+
+.home-quick-access.is-fullscreen .home-quick-access-item {
+  gap: 10px;
+  grid-template-columns: 34px minmax(0, 1fr);
+  padding: 10px 12px;
+}
+
+.home-quick-access.is-fullscreen .home-quick-access-icon {
+  border-radius: 9px;
+  height: 34px;
+  width: 34px;
+}
+
+.home-quick-access.is-fullscreen .home-quick-access-icon svg {
+  height: 18px;
+  width: 18px;
+}
+
+.home-quick-access.is-fullscreen .home-quick-access-label {
+  font-size: 13.5px;
 }
 
 .home-cross {
@@ -1778,7 +1840,7 @@ html[data-mode="night"] .home-quick-access-item.is-training .home-quick-access-l
   display: grid;
   flex: 1;
   gap: var(--home-cross-gap);
-  grid-template-columns: minmax(300px, 0.92fr) minmax(0, 1.08fr);
+  grid-template-columns: minmax(320px, 1.04fr) minmax(0, 1fr);
   min-height: 0;
 }
 
@@ -1789,14 +1851,14 @@ html[data-mode="night"] .home-quick-access-item.is-training .home-quick-access-l
   min-width: 0;
 }
 
-/* Attention sized to content (capped); loans closing fills the rest */
+/* Attention and loans closing split the column evenly */
 .home-cross-left {
-  grid-template-rows: minmax(148px, 0.72fr) minmax(0, 1.28fr);
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
 }
 
-/* Calendar takes the height it needs; quick access is a short strip beneath it */
+/* Calendar stays the tallest panel without squeezing the module rail */
 .home-cross-right {
-  grid-template-rows: minmax(0, 1fr) clamp(100px, 19%, 150px);
+  grid-template-rows: minmax(0, 1fr) minmax(176px, 0.42fr);
 }
 
 .home-quad {
@@ -1830,12 +1892,96 @@ html[data-mode="night"] .home-quick-access-item.is-training .home-quick-access-l
 }
 
 .home-quad-head {
-  align-items: baseline;
+  align-items: center;
   display: flex;
   gap: 10px;
   justify-content: space-between;
   margin-bottom: 10px;
   min-width: 0;
+}
+
+.home-quad-actions {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.home-quad-expand {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  height: 24px;
+  justify-content: center;
+  padding: 0;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+  width: 24px;
+}
+
+.home-quad-expand:hover {
+  background: var(--brand-soft);
+  border-color: color-mix(in srgb, var(--brand) 26%, var(--line));
+  color: var(--brand);
+}
+
+.home-quad-expand:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+
+.home-panel-overlay {
+  align-items: stretch;
+  background: rgb(17 28 51 / 42%);
+  display: grid;
+  inset: 0;
+  padding: 16px;
+  position: fixed;
+  z-index: 60;
+}
+
+.home-quad.is-fullscreen {
+  border-radius: 16px;
+  box-shadow: 0 26px 64px rgb(15 23 42 / 26%);
+  height: 100%;
+  max-height: none;
+  min-height: 0;
+  padding: 16px 20px 18px;
+  width: 100%;
+}
+
+.home-quad.is-fullscreen .home-quad-label {
+  font-size: 12px;
+}
+
+/* Wide panels read better as a grid of cards than one long column */
+.home-quad.is-fullscreen .home-attention-list,
+.home-quad.is-fullscreen .home-pipeline-list {
+  align-content: start;
+  display: grid;
+  gap: 10px;
+  grid-auto-rows: max-content;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+}
+
+.home-quad.is-fullscreen .home-attention-item,
+.home-quad.is-fullscreen .home-pipeline-item {
+  background: color-mix(in srgb, var(--panel-muted) 70%, var(--panel));
+  border-color: var(--line);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 6%);
+  padding: 12px 14px;
+}
+
+.home-quad.is-fullscreen .home-attention-body strong,
+.home-quad.is-fullscreen .home-pipeline-item strong {
+  font-size: 13.5px;
 }
 
 .home-quad-meta {
@@ -1858,24 +2004,25 @@ html[data-mode="night"] .home-quick-access-item.is-training .home-quick-access-l
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 5px;
+  gap: 8px;
   min-height: 0;
   overflow: auto;
 }
 
 .home-attention-item {
   align-items: center;
-  background: color-mix(in srgb, var(--panel-muted) 55%, transparent);
-  border: 1px solid transparent;
+  background: color-mix(in srgb, var(--panel-muted) 78%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--line) 92%, transparent);
   border-left: 3px solid var(--brand);
-  border-radius: 8px;
+  border-radius: 9px;
+  box-shadow: 0 1px 0 rgb(15 23 42 / 4%);
   cursor: pointer;
   display: grid;
   gap: 8px;
   grid-template-columns: 52px minmax(0, 1fr);
-  padding: 6px 8px;
+  padding: 8px 10px;
   text-align: left;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
 .home-attention-item.is-kyc {
@@ -1892,7 +2039,8 @@ html[data-mode="night"] .home-quick-access-item.is-training .home-quick-access-l
 
 .home-attention-item:hover {
   background: var(--brand-soft);
-  border-color: color-mix(in srgb, var(--brand) 18%, transparent);
+  border-color: color-mix(in srgb, var(--brand) 28%, var(--line));
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--brand) 12%, transparent);
 }
 
 .home-attention-kind {
@@ -1968,21 +2116,44 @@ html[data-mode="night"] .home-quick-access-item.is-training .home-quick-access-l
 
 .home-pipeline-item {
   align-items: center;
-  background: color-mix(in srgb, var(--panel-muted) 55%, transparent);
-  border: 1px solid transparent;
-  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel-muted) 78%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--line) 92%, transparent);
+  border-left: 3px solid color-mix(in srgb, var(--brand) 55%, var(--line));
+  border-radius: 9px;
+  box-shadow: 0 1px 0 rgb(15 23 42 / 4%);
   cursor: pointer;
   display: grid;
   gap: 2px 10px;
   grid-template-columns: minmax(0, 1fr) auto;
-  padding: 6px 8px;
+  padding: 8px 10px;
   text-align: left;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.home-pipeline-item.is-identification {
+  border-left-color: #64748b;
+}
+
+.home-pipeline-item.is-evaluation {
+  border-left-color: #b45309;
+}
+
+.home-pipeline-item.is-approval {
+  border-left-color: #3b6b8c;
+}
+
+.home-pipeline-item.is-execution {
+  border-left-color: #0f766e;
+}
+
+.home-pipeline-item.is-completion {
+  border-left-color: #15803d;
 }
 
 .home-pipeline-item:hover {
   background: var(--brand-soft);
-  border-color: color-mix(in srgb, var(--brand) 18%, transparent);
+  border-color: color-mix(in srgb, var(--brand) 28%, var(--line));
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--brand) 12%, transparent);
 }
 
 .home-pipeline-item strong {
@@ -2059,6 +2230,10 @@ html[data-mode="night"] .home-quick-access-item.is-training .home-quick-access-l
   gap: 8px;
   min-width: 0;
   padding: 12px 14px;
+}
+
+.home-calendar-section-head {
+  margin-bottom: 0;
 }
 
 .home-calendar-section-label {
@@ -2480,22 +2655,20 @@ button.pill {
   text-align: left;
 }
 
+/*
+ * The overflow control is left out of these escapes on purpose: its popover is portalled,
+ * and the cell's clipping is what anchors that control's sticky bottom offset.
+ */
 .home-cal-week-day:has(.home-cal-holiday-name:hover),
 .home-cal-week-day:has(.home-cal-event:hover),
-.home-cal-week-day:has(.home-cal-event:focus-visible),
-.home-cal-week-day:has(.home-cal-more:hover),
-.home-cal-week-day:has(.home-cal-more:focus-visible),
-.home-cal-week-day:has(.home-cal-more.is-open) {
+.home-cal-week-day:has(.home-cal-event:focus-visible) {
   overflow: visible;
   z-index: 6;
 }
 
 .home-cal-week-grid:has(.home-cal-holiday-name:hover),
 .home-cal-week-grid:has(.home-cal-event:hover),
-.home-cal-week-grid:has(.home-cal-event:focus-visible),
-.home-cal-week-grid:has(.home-cal-more:hover),
-.home-cal-week-grid:has(.home-cal-more:focus-visible),
-.home-cal-week-grid:has(.home-cal-more.is-open) {
+.home-cal-week-grid:has(.home-cal-event:focus-visible) {
   overflow: visible;
 }
 
@@ -2625,20 +2798,14 @@ button.pill {
 
 .home-cal-day:has(.home-cal-holiday-name:hover),
 .home-cal-day:has(.home-cal-event:hover),
-.home-cal-day:has(.home-cal-event:focus-visible),
-.home-cal-day:has(.home-cal-more:hover),
-.home-cal-day:has(.home-cal-more:focus-visible),
-.home-cal-day:has(.home-cal-more.is-open) {
+.home-cal-day:has(.home-cal-event:focus-visible) {
   overflow: visible;
   z-index: 6;
 }
 
 .home-cal-month-grid:has(.home-cal-holiday-name:hover),
 .home-cal-month-grid:has(.home-cal-event:hover),
-.home-cal-month-grid:has(.home-cal-event:focus-visible),
-.home-cal-month-grid:has(.home-cal-more:hover),
-.home-cal-month-grid:has(.home-cal-more:focus-visible),
-.home-cal-month-grid:has(.home-cal-more.is-open) {
+.home-cal-month-grid:has(.home-cal-event:focus-visible) {
   overflow: visible;
 }
 
@@ -2861,9 +3028,11 @@ button.pill {
 
 .home-cal-more {
   align-items: center;
-  background: transparent;
+  /* Matches the day cell so the control stays legible when a short cell makes it overlap a chip. */
+  background: inherit;
   border: 0;
   border-radius: 0;
+  bottom: 0;
   box-shadow: none;
   color: var(--muted);
   cursor: pointer;
@@ -2878,8 +3047,11 @@ button.pill {
   max-width: 100%;
   min-width: 0;
   padding: 0;
-  /* Sits in flow directly under the visible chips, not pinned to the cell floor. */
-  position: relative;
+  /*
+   * Sits in flow directly under the visible chips, but sticks to the cell floor so cells
+   * too short for the chips plus this control can never clip it out of reach.
+   */
+  position: sticky;
   text-align: left;
   width: fit-content;
   z-index: 2;
@@ -2894,13 +3066,13 @@ button.pill {
 
 .home-cal-more:hover,
 .home-cal-more:focus-visible {
-  background: transparent;
+  background: inherit;
   color: var(--text);
   outline: none;
 }
 
 .home-cal-more.is-open {
-  background: transparent;
+  background: inherit;
   color: var(--text);
 }
 
@@ -3344,6 +3516,14 @@ button.pill {
     min-height: 460px;
   }
 
+  .home-quad-br {
+    min-height: 220px;
+  }
+
+  .home-panel-overlay {
+    padding: 10px;
+  }
+
   .home-calendar-head {
     align-items: flex-start;
     flex-direction: column;
@@ -3366,28 +3546,6 @@ button.pill {
   .home-month-stats {
     grid-template-columns: 1fr;
   }
-}
-
-.home-date {
-  color: var(--muted);
-  font-size: 12.5px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  line-height: 1.2;
-  margin: 0;
-}
-
-.home-greeting {
-  color: var(--text);
-  font-size: 15px;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-  margin: 0;
-}
-
-html[data-mode="night"] .home-greeting {
-  color: var(--text);
 }
 
 .page-title {
@@ -7118,6 +7276,20 @@ html[data-mode="night"] .loan-stage-tooltip::after {
   font-size: 11px;
 }
 
+.reports-toolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  justify-content: space-between;
+}
+
+.reports-drill-hint {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0;
+}
+
 .reports-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -7280,6 +7452,322 @@ html[data-mode="night"] .loan-stage-tooltip::after {
   width: 8px;
 }
 
+/* Every bar, slice and ring segment opens the drill-down modal */
+.report-card-body .recharts-bar-rectangle,
+.report-card-body .recharts-active-bar,
+.report-card-body .recharts-pie-sector,
+.report-card-body .recharts-radial-bar-sector {
+  cursor: pointer;
+}
+
+/* Sits higher than centre so the card never crowds the bottom of the viewport */
+.report-drill-backdrop {
+  animation: report-drill-fade 140ms ease-out;
+  backdrop-filter: blur(2px);
+  padding: 32px 24px 64px;
+}
+
+.report-drill-modal {
+  animation: report-drill-rise 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  border-radius: 14px;
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 8%),
+    0 18px 48px rgb(0 0 0 / 22%);
+  display: flex;
+  flex-direction: column;
+  /* Capped so long result sets scroll instead of stretching the card */
+  max-height: min(600px, calc(100vh - 128px));
+  max-width: 1020px;
+  overflow: hidden;
+  padding: 0;
+  width: min(1020px, calc(100vw - 48px));
+}
+
+@keyframes report-drill-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes report-drill-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+}
+
+.report-drill-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 18px 20px 14px;
+}
+
+.report-drill-heading {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+
+.report-drill-swatch {
+  background: var(--drill-accent, var(--brand));
+  border-radius: 999px;
+  flex: none;
+  height: 34px;
+  width: 4px;
+}
+
+.report-drill-titles {
+  min-width: 0;
+}
+
+.report-drill-eyebrow {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.report-drill-head h2 {
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin: 3px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-drill-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 20px 14px;
+}
+
+.report-drill-metric {
+  background: var(--panel-muted);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: grid;
+  gap: 1px;
+  min-width: 112px;
+  padding: 8px 12px;
+}
+
+.report-drill-metric.is-accent {
+  background: color-mix(in srgb, var(--drill-accent, var(--brand)) 10%, var(--panel));
+  border-color: color-mix(in srgb, var(--drill-accent, var(--brand)) 32%, transparent);
+}
+
+.report-drill-metric.is-accent strong {
+  color: var(--drill-accent, var(--brand));
+}
+
+.report-drill-metric span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* Entity labels are stored lower-case for the inline record counts */
+.report-drill-metric.is-accent span::first-letter {
+  text-transform: uppercase;
+}
+
+.report-drill-metric strong {
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.report-drill-toolbar {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 10px;
+  padding: 10px 20px;
+}
+
+.report-drill-search {
+  align-items: center;
+  background: var(--panel-muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  display: flex;
+  flex: 1;
+  gap: 7px;
+  max-width: 260px;
+  min-height: 32px;
+  padding: 0 12px;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.report-drill-search:focus-within {
+  background: var(--panel);
+  border-color: color-mix(in srgb, var(--drill-accent, var(--brand)) 50%, var(--line));
+}
+
+.report-drill-search input {
+  background: none;
+  border: 0;
+  color: var(--text);
+  flex: 1;
+  font-size: 12.5px;
+  min-width: 0;
+  outline: none;
+}
+
+.report-drill-search input::-webkit-search-cancel-button {
+  cursor: pointer;
+}
+
+.report-drill-count {
+  color: var(--muted);
+  font-size: 12px;
+  margin-right: auto;
+}
+
+.report-drill-toolbar .secondary-button {
+  font-size: 12.5px;
+  min-height: 32px;
+  padding: 0 11px;
+}
+
+.report-drill-toolbar .secondary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.report-drill-table-wrap {
+  /* Wide record sets scroll on both axes; tint the thumb so the affordance is obvious */
+  --scrollbar-thumb: color-mix(in srgb, var(--text) 30%, transparent);
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--text) 46%, transparent);
+  flex: 1;
+  min-height: 96px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.report-drill-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12.5px;
+  min-width: 100%;
+  white-space: nowrap;
+}
+
+.report-drill-table th {
+  background: var(--panel-muted);
+  /* inset shadow rather than a border, which sticky headers drop while scrolling */
+  box-shadow: inset 0 -1px 0 var(--line);
+  color: var(--muted);
+  padding: 0;
+  position: sticky;
+  text-align: left;
+  top: 0;
+  z-index: 1;
+}
+
+.report-drill-table th button {
+  align-items: center;
+  background: none;
+  border: 0;
+  color: inherit;
+  display: flex;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  gap: 4px;
+  letter-spacing: 0.01em;
+  padding: 9px 12px;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.report-drill-table th.is-numeric button {
+  justify-content: flex-end;
+}
+
+.report-drill-table th button:hover {
+  color: var(--text);
+}
+
+.report-drill-table td {
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  color: var(--text-secondary);
+  padding: 9px 12px;
+}
+
+.report-drill-table td:first-child {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.report-drill-table td.is-numeric {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.report-drill-table th:first-child button,
+.report-drill-table td:first-child {
+  padding-left: 20px;
+}
+
+.report-drill-table th:last-child button,
+.report-drill-table td:last-child {
+  padding-right: 20px;
+}
+
+.report-drill-table tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--text) 3%, transparent);
+}
+
+.report-drill-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--drill-accent, var(--brand)) 10%, var(--panel));
+}
+
+.report-drill-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.report-drill-empty {
+  color: var(--muted);
+  font-size: 13px;
+  padding: 32px 20px;
+  text-align: center;
+}
+
+.report-drill-foot {
+  align-items: center;
+  background: var(--panel-muted);
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 12px 20px;
+}
+
+.report-drill-foot span {
+  color: var(--muted);
+  font-size: 11.5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .report-drill-backdrop,
+  .report-drill-modal {
+    animation: none;
+  }
+}
+
 @media (max-width: 1200px) {
   .report-kpi-strip {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -7306,6 +7794,36 @@ html[data-mode="night"] .loan-stage-tooltip::after {
 
   .report-span-2 {
     grid-column: span 1;
+  }
+
+  .report-drill-backdrop {
+    padding: 12px 12px 32px;
+  }
+
+  .report-drill-modal {
+    max-height: calc(100vh - 60px);
+    width: calc(100vw - 24px);
+  }
+
+  .report-drill-head,
+  .report-drill-metrics,
+  .report-drill-toolbar,
+  .report-drill-foot {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .report-drill-table th:first-child button,
+  .report-drill-table td:first-child {
+    padding-left: 14px;
+  }
+
+  .report-drill-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .report-drill-count {
+    margin-right: 0;
   }
 }
 
