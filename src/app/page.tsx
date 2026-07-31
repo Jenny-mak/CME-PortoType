@@ -5314,8 +5314,13 @@ function DealsWorkspace({
   const [editing, setEditing] = useState<Deal | null>(null);
   const [returnToHome, setReturnToHome] = useState(false);
 
+  // The shared store needs the resolved rows, so track them in a ref rather than
+  // reading the render-scoped state, which would drop batched updates.
+  const committedDealRows = useRef(dealRows);
+
   function commitDealRows(updater: Deal[] | ((prev: Deal[]) => Deal[])) {
-    const next = typeof updater === "function" ? updater(dealRows) : updater;
+    const next = typeof updater === "function" ? updater(committedDealRows.current) : updater;
+    committedDealRows.current = next;
     setDealRows(next);
     setPipelineLoans(moduleKey, next);
   }
