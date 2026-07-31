@@ -180,6 +180,8 @@ type QuickCreateField = {
   placeholder?: string;
 };
 
+type AccentColor = { key: string; label: string; value: string; mark?: string };
+
 const accentColors = [
   { key: "adminGray", label: "Admin Gray", value: "#5a6572", mark: "#7b8794" },
   { key: "crimson", label: "Crimson", value: "#a31d31", mark: "#cf4651" },
@@ -198,11 +200,11 @@ const accentColors = [
   { key: "softClay", label: "Soft Clay", value: "#8a5a40" },
   { key: "moonIndigo", label: "Moon Indigo", value: "#4a4570" },
   { key: "flatNight", label: "Flat Night", value: "#242427", mark: "#3d3d42" },
-] as const satisfies ReadonlyArray<{ key: string; label: string; value: string; mark?: string }>;
+] as const satisfies ReadonlyArray<AccentColor>;
 
 type AccentKey = (typeof accentColors)[number]["key"];
 
-function getAccentMark(entry: (typeof accentColors)[number] | undefined, accent: string, isNight: boolean) {
+function getAccentMark(entry: AccentColor | undefined, accent: string, isNight: boolean) {
   const mark = entry?.mark;
   if (isNight) return lighten(mark ?? accent, 40);
   return mark ?? lighten(accent, 48);

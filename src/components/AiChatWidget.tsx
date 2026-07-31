@@ -1,7 +1,15 @@
 "use client";
 
 import { Bot, ChevronDown, Send, Sparkles, Trash2 } from "lucide-react";
-import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import { accounts, deals, leads, meetings, tasks } from "@/lib/crm-data";
 import { ModuleKey } from "@/lib/types";
 import { PublicUser } from "@/lib/users";
@@ -250,7 +258,7 @@ export function AiChatWidget({ user, activeModule }: { user: PublicUser; activeM
     sendMessage(input);
   }
 
-  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+  function handleKeyDown(event: ReactKeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       sendMessage(input);
