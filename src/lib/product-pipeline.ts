@@ -107,11 +107,11 @@ export const PIPELINE_STAGE_COLORS: Record<
   cool: {
     label: "Pipeline",
     colors: {
-      Identification: "#A25DDC",
-      Evaluation: "#579BFC",
-      Approval: "#66CCFF",
-      Execution: "#00D2D2",
-      Completion: "#00C875",
+      Identification: "#9A62E8",
+      Evaluation: "#4C82F7",
+      Approval: "#1FA0DC",
+      Execution: "#0BAAA4",
+      Completion: "#17AE6E",
     },
   },
   vivid: {

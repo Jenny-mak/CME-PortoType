@@ -40,6 +40,7 @@ import {
 } from "lucide-react";
 import {
   createContext,
+  Fragment,
   useContext,
   useEffect,
   useMemo,
@@ -489,6 +490,7 @@ export default function CRMWorkspace() {
   const [moduleReturnHome, setModuleReturnHome] = useState(false);
   const [moduleTabIntent, setModuleTabIntent] = useState<string | null>(null);
   const [accountsView, setAccountsView] = useState<"All Clients" | "Active Clients">("All Clients");
+  const [navToken, setNavToken] = useState(0);
 
   useEffect(() => {
     const user = loadSessionUser();
@@ -625,6 +627,15 @@ export default function CRMWorkspace() {
     setModuleTabIntent(options?.tab ?? null);
   }
 
+  // Sidebar navigation always lands on the module's list view, even when a record
+  // form is open, so bump the token that remounts the workspace body.
+  function navigateFromSidebar(module: ModuleKey) {
+    setCreateIntent(null);
+    setRecordIntent(null);
+    setNavToken((token) => token + 1);
+    openModule(module);
+  }
+
   function openRecord(module: ModuleKey, recordId: string) {
     setCreateIntent(null);
     openModule(module);
@@ -689,7 +700,7 @@ export default function CRMWorkspace() {
         expanded={sidebarExpanded}
         width={sidebarWidth}
         onWidthChange={setSidebarWidth}
-        onChange={openModule}
+        onChange={navigateFromSidebar}
         onToggle={() => setSidebarExpanded((value) => !value)}
       />
       <section className="main">
@@ -729,138 +740,140 @@ export default function CRMWorkspace() {
                   onReturnHome={moduleReturnHome ? returnToHome : undefined}
                 />
               ) : null}
-              {activeModule === "home" && (
-                <HomeDashboard
-                  user={sessionUser}
-                  onNavigate={openModule}
-                  onOpenRecord={openRecord}
-                />
-              )}
-              {activeModule === "leads" && (
-                <LeadsWorkspace
-                  detailTab={detailTab}
-                  setDetailTab={setDetailTab}
-                  createIntentId={createIntent?.module === "leads" ? createIntent.id : null}
-                  onCreateHandled={() => setCreateIntent(null)}
-                  openRecordIntent={recordIntent?.module === "leads" ? recordIntent : null}
-                  onRecordHandled={() => setRecordIntent(null)}
-                  onReturnHome={returnToHome}
-                />
-              )}
-              {activeModule === "accounts" && (
-                <AccountsWorkspace
-                  view={accountsView}
-                  createIntentId={createIntent?.module === "accounts" ? createIntent.id : null}
-                  onCreateHandled={() => setCreateIntent(null)}
-                  openRecordIntent={recordIntent?.module === "accounts" ? recordIntent : null}
-                  onRecordHandled={() => setRecordIntent(null)}
-                  onReturnHome={returnToHome}
-                />
-              )}
-              {activeModule === "deals" && (
-                <DealsWorkspace
-                  moduleKey="deals"
-                  createIntentId={createIntent?.module === "deals" ? createIntent.id : null}
-                  onCreateHandled={() => setCreateIntent(null)}
-                  openRecordIntent={recordIntent?.module === "deals" ? recordIntent : null}
-                  onRecordHandled={() => setRecordIntent(null)}
-                  onReturnHome={returnToHome}
-                />
-              )}
-              {activeModule === "tradeFinance" && (
-                <DealsWorkspace
-                  moduleKey="tradeFinance"
-                  createIntentId={createIntent?.module === "tradeFinance" ? createIntent.id : null}
-                  onCreateHandled={() => setCreateIntent(null)}
-                  openRecordIntent={recordIntent?.module === "tradeFinance" ? recordIntent : null}
-                  onRecordHandled={() => setRecordIntent(null)}
-                  onReturnHome={returnToHome}
-                />
-              )}
-              {activeModule === "paymentService" && (
-                <DealsWorkspace
-                  moduleKey="paymentService"
-                  createIntentId={createIntent?.module === "paymentService" ? createIntent.id : null}
-                  onCreateHandled={() => setCreateIntent(null)}
-                  openRecordIntent={recordIntent?.module === "paymentService" ? recordIntent : null}
-                  onRecordHandled={() => setRecordIntent(null)}
-                  onReturnHome={returnToHome}
-                />
-              )}
-              {activeModule === "sustainableFinance" && (
-                <DealsWorkspace
-                  moduleKey="sustainableFinance"
-                  createIntentId={createIntent?.module === "sustainableFinance" ? createIntent.id : null}
-                  onCreateHandled={() => setCreateIntent(null)}
-                  openRecordIntent={recordIntent?.module === "sustainableFinance" ? recordIntent : null}
-                  onRecordHandled={() => setRecordIntent(null)}
-                  onReturnHome={returnToHome}
-                />
-              )}
-              {activeModule === "globalMarket" && (
-                <DealsWorkspace
-                  moduleKey="globalMarket"
-                  createIntentId={createIntent?.module === "globalMarket" ? createIntent.id : null}
-                  onCreateHandled={() => setCreateIntent(null)}
-                  openRecordIntent={recordIntent?.module === "globalMarket" ? recordIntent : null}
-                  onRecordHandled={() => setRecordIntent(null)}
-                  onReturnHome={returnToHome}
-                />
-              )}
-              {activeModule === "lifeInsurance" && (
-                <DealsWorkspace
-                  moduleKey="lifeInsurance"
-                  createIntentId={createIntent?.module === "lifeInsurance" ? createIntent.id : null}
-                  onCreateHandled={() => setCreateIntent(null)}
-                  openRecordIntent={recordIntent?.module === "lifeInsurance" ? recordIntent : null}
-                  onRecordHandled={() => setRecordIntent(null)}
-                  onReturnHome={returnToHome}
-                />
-              )}
-              {activeModule === "tasks" && (
-                <TasksWorkspace
-                  createIntentId={createIntent?.module === "tasks" ? createIntent.id : null}
-                  onCreateHandled={() => setCreateIntent(null)}
-                  openRecordIntent={recordIntent?.module === "tasks" ? recordIntent : null}
-                  onRecordHandled={() => setRecordIntent(null)}
-                  onReturnHome={returnToHome}
-                />
-              )}
-              {activeModule === "meetings" && (
-                <MeetingsWorkspace
-                  createIntentId={createIntent?.module === "meetings" ? createIntent.id : null}
-                  onCreateHandled={() => setCreateIntent(null)}
-                  openRecordIntent={recordIntent?.module === "meetings" ? recordIntent : null}
-                  onRecordHandled={() => setRecordIntent(null)}
-                  onReturnHome={returnToHome}
-                />
-              )}
-              {activeModule === "calls" && (
-                <CallsWorkspace
-                  createIntentId={createIntent?.module === "calls" ? createIntent.id : null}
-                  onCreateHandled={() => setCreateIntent(null)}
-                />
-              )}
-              {activeModule === "campaigns" && (
-                <CampaignWorkspace
-                  createIntentId={createIntent?.module === "campaigns" ? createIntent.id : null}
-                  onCreateHandled={() => setCreateIntent(null)}
-                  openRecordIntent={recordIntent?.module === "campaigns" ? recordIntent : null}
-                  onRecordHandled={() => setRecordIntent(null)}
-                  onReturnHome={returnToHome}
-                />
-              )}
-              {activeModule === "reports" && <ReportsWorkspace />}
-              {activeModule === "contacts" && (
-                <ContactsWorkspace
-                  createIntentId={createIntent?.module === "contacts" ? createIntent.id : null}
-                  onCreateHandled={() => setCreateIntent(null)}
-                  openRecordIntent={recordIntent?.module === "contacts" ? recordIntent : null}
-                  onRecordHandled={() => setRecordIntent(null)}
-                  onReturnHome={returnToHome}
-                />
-              )}
-              {activeModule === "documents" && <Placeholder title="Documents" />}
+              <Fragment key={`${activeModule}-${navToken}`}>
+                {activeModule === "home" && (
+                  <HomeDashboard
+                    user={sessionUser}
+                    onNavigate={openModule}
+                    onOpenRecord={openRecord}
+                  />
+                )}
+                {activeModule === "leads" && (
+                  <LeadsWorkspace
+                    detailTab={detailTab}
+                    setDetailTab={setDetailTab}
+                    createIntentId={createIntent?.module === "leads" ? createIntent.id : null}
+                    onCreateHandled={() => setCreateIntent(null)}
+                    openRecordIntent={recordIntent?.module === "leads" ? recordIntent : null}
+                    onRecordHandled={() => setRecordIntent(null)}
+                    onReturnHome={returnToHome}
+                  />
+                )}
+                {activeModule === "accounts" && (
+                  <AccountsWorkspace
+                    view={accountsView}
+                    createIntentId={createIntent?.module === "accounts" ? createIntent.id : null}
+                    onCreateHandled={() => setCreateIntent(null)}
+                    openRecordIntent={recordIntent?.module === "accounts" ? recordIntent : null}
+                    onRecordHandled={() => setRecordIntent(null)}
+                    onReturnHome={returnToHome}
+                  />
+                )}
+                {activeModule === "deals" && (
+                  <DealsWorkspace
+                    moduleKey="deals"
+                    createIntentId={createIntent?.module === "deals" ? createIntent.id : null}
+                    onCreateHandled={() => setCreateIntent(null)}
+                    openRecordIntent={recordIntent?.module === "deals" ? recordIntent : null}
+                    onRecordHandled={() => setRecordIntent(null)}
+                    onReturnHome={returnToHome}
+                  />
+                )}
+                {activeModule === "tradeFinance" && (
+                  <DealsWorkspace
+                    moduleKey="tradeFinance"
+                    createIntentId={createIntent?.module === "tradeFinance" ? createIntent.id : null}
+                    onCreateHandled={() => setCreateIntent(null)}
+                    openRecordIntent={recordIntent?.module === "tradeFinance" ? recordIntent : null}
+                    onRecordHandled={() => setRecordIntent(null)}
+                    onReturnHome={returnToHome}
+                  />
+                )}
+                {activeModule === "paymentService" && (
+                  <DealsWorkspace
+                    moduleKey="paymentService"
+                    createIntentId={createIntent?.module === "paymentService" ? createIntent.id : null}
+                    onCreateHandled={() => setCreateIntent(null)}
+                    openRecordIntent={recordIntent?.module === "paymentService" ? recordIntent : null}
+                    onRecordHandled={() => setRecordIntent(null)}
+                    onReturnHome={returnToHome}
+                  />
+                )}
+                {activeModule === "sustainableFinance" && (
+                  <DealsWorkspace
+                    moduleKey="sustainableFinance"
+                    createIntentId={createIntent?.module === "sustainableFinance" ? createIntent.id : null}
+                    onCreateHandled={() => setCreateIntent(null)}
+                    openRecordIntent={recordIntent?.module === "sustainableFinance" ? recordIntent : null}
+                    onRecordHandled={() => setRecordIntent(null)}
+                    onReturnHome={returnToHome}
+                  />
+                )}
+                {activeModule === "globalMarket" && (
+                  <DealsWorkspace
+                    moduleKey="globalMarket"
+                    createIntentId={createIntent?.module === "globalMarket" ? createIntent.id : null}
+                    onCreateHandled={() => setCreateIntent(null)}
+                    openRecordIntent={recordIntent?.module === "globalMarket" ? recordIntent : null}
+                    onRecordHandled={() => setRecordIntent(null)}
+                    onReturnHome={returnToHome}
+                  />
+                )}
+                {activeModule === "lifeInsurance" && (
+                  <DealsWorkspace
+                    moduleKey="lifeInsurance"
+                    createIntentId={createIntent?.module === "lifeInsurance" ? createIntent.id : null}
+                    onCreateHandled={() => setCreateIntent(null)}
+                    openRecordIntent={recordIntent?.module === "lifeInsurance" ? recordIntent : null}
+                    onRecordHandled={() => setRecordIntent(null)}
+                    onReturnHome={returnToHome}
+                  />
+                )}
+                {activeModule === "tasks" && (
+                  <TasksWorkspace
+                    createIntentId={createIntent?.module === "tasks" ? createIntent.id : null}
+                    onCreateHandled={() => setCreateIntent(null)}
+                    openRecordIntent={recordIntent?.module === "tasks" ? recordIntent : null}
+                    onRecordHandled={() => setRecordIntent(null)}
+                    onReturnHome={returnToHome}
+                  />
+                )}
+                {activeModule === "meetings" && (
+                  <MeetingsWorkspace
+                    createIntentId={createIntent?.module === "meetings" ? createIntent.id : null}
+                    onCreateHandled={() => setCreateIntent(null)}
+                    openRecordIntent={recordIntent?.module === "meetings" ? recordIntent : null}
+                    onRecordHandled={() => setRecordIntent(null)}
+                    onReturnHome={returnToHome}
+                  />
+                )}
+                {activeModule === "calls" && (
+                  <CallsWorkspace
+                    createIntentId={createIntent?.module === "calls" ? createIntent.id : null}
+                    onCreateHandled={() => setCreateIntent(null)}
+                  />
+                )}
+                {activeModule === "campaigns" && (
+                  <CampaignWorkspace
+                    createIntentId={createIntent?.module === "campaigns" ? createIntent.id : null}
+                    onCreateHandled={() => setCreateIntent(null)}
+                    openRecordIntent={recordIntent?.module === "campaigns" ? recordIntent : null}
+                    onRecordHandled={() => setRecordIntent(null)}
+                    onReturnHome={returnToHome}
+                  />
+                )}
+                {activeModule === "reports" && <ReportsWorkspace />}
+                {activeModule === "contacts" && (
+                  <ContactsWorkspace
+                    createIntentId={createIntent?.module === "contacts" ? createIntent.id : null}
+                    onCreateHandled={() => setCreateIntent(null)}
+                    openRecordIntent={recordIntent?.module === "contacts" ? recordIntent : null}
+                    onRecordHandled={() => setRecordIntent(null)}
+                    onReturnHome={returnToHome}
+                  />
+                )}
+                {activeModule === "documents" && <Placeholder title="Documents" />}
+              </Fragment>
             </ModuleViewActionsProvider>
           )}
         </div>
@@ -1801,31 +1814,24 @@ function HomeDashboard({
               <button
                 className="home-quick-access-item is-training"
                 type="button"
+                title="Training · 8 video courses"
                 onClick={() => setHomeView("training")}
               >
                 <span className="home-quick-access-icon">
                   <Play size={18} strokeWidth={1.6} />
                 </span>
-                <span className="home-quick-access-copy">
-                  <strong>Training</strong>
-                  <span>8 video courses</span>
-                </span>
-                <ChevronRight className="home-quick-access-arrow" size={15} strokeWidth={1.7} />
+                <span className="home-quick-access-label">Training</span>
               </button>
               {quickAccessItems.map((module) => (
                 <button
                   className="home-quick-access-item"
                   key={module.key}
-                  title={module.title ?? module.label}
+                  title={`${module.title ?? module.label} · ${module.description}`}
                   onClick={() => onNavigate(module.key)}
                   type="button"
                 >
                   <span className="home-quick-access-icon">{moduleIcons[module.key]}</span>
-                  <span className="home-quick-access-copy">
-                    <strong>{module.label}</strong>
-                    <span>{module.description}</span>
-                  </span>
-                  <ChevronRight className="home-quick-access-arrow" size={15} strokeWidth={1.7} />
+                  <span className="home-quick-access-label">{module.label}</span>
                 </button>
               ))}
             </div>
@@ -3551,7 +3557,7 @@ function ChoiceField<T extends string>({
   );
 }
 
-function ClientFormModal({
+function ClientFormPage({
   account,
   mode,
   onClose,
@@ -3589,354 +3595,351 @@ function ClientFormModal({
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <section className="modal-card client-form-modal" onClick={(event) => event.stopPropagation()}>
-        <header className="client-form-header">
-          <div>
-            <p className="client-form-eyebrow">Clients</p>
-            <h2>{mode === "create" ? "Create Client" : "Edit Client"}</h2>
-            <p className="client-form-subtitle">Capture company profile, status, and primary identification.</p>
-          </div>
-          <button type="button" className="icon-button" aria-label="Close" onClick={onClose}>
-            <X size={16} />
+    <section className="client-form-page">
+      <header className="client-form-header">
+        <div>
+          <button type="button" className="client-form-back" onClick={onClose}>
+            <ChevronLeft size={14} />
+            Clients
           </button>
-        </header>
-
-        <div className="client-form-body">
-          <section className="client-form-section">
-            <div className="client-form-section-head">
-              <strong>Company</strong>
-              <span>Basic client details</span>
-            </div>
-            <div className="client-form-grid">
-              <div className={`form-row ${companyNameError ? "is-invalid" : ""}`}>
-                <label htmlFor="client-company-name">
-                  Company Name <span className="field-required">*</span>
-                </label>
-                <input
-                  id="client-company-name"
-                  className={`field ${companyNameError ? "is-invalid" : ""}`}
-                  placeholder="Enter company name"
-                  value={draft.companyName}
-                  aria-required="true"
-                  aria-invalid={companyNameError}
-                  onChange={(event) => update("companyName", event.target.value)}
-                />
-                {companyNameError ? <p className="field-error">Company Name is required.</p> : null}
-              </div>
-              <div className="form-row">
-                <label htmlFor="client-rm">Relationship Manager</label>
-                <input
-                  id="client-rm"
-                  className="field"
-                  placeholder="Enter relationship manager name"
-                  value={draft.relationshipManager}
-                  onChange={(event) => update("relationshipManager", event.target.value)}
-                />
-              </div>
-              <div className="form-row">
-                <label htmlFor="client-phone">Phone</label>
-                <input
-                  id="client-phone"
-                  className="field"
-                  type="tel"
-                  placeholder="Enter phone number"
-                  value={draft.phone}
-                  onChange={(event) => update("phone", event.target.value)}
-                />
-              </div>
-              <div className="form-row">
-                <label htmlFor="client-email">Email</label>
-                <input
-                  id="client-email"
-                  className="field"
-                  type="email"
-                  placeholder="Enter email"
-                  value={draft.email}
-                  onChange={(event) => update("email", event.target.value)}
-                />
-              </div>
-              <div className="form-row">
-                <label htmlFor="client-website">Website</label>
-                <input
-                  id="client-website"
-                  className="field"
-                  placeholder="https://"
-                  value={draft.website}
-                  onChange={(event) => update("website", event.target.value)}
-                />
-              </div>
-              <div className="form-row">
-                <label htmlFor="client-sic">SIC Code</label>
-                <input
-                  id="client-sic"
-                  className="field"
-                  placeholder="Enter SIC code"
-                  value={draft.sicCode}
-                  onChange={(event) => update("sicCode", event.target.value)}
-                />
-              </div>
-              <div className="form-row">
-                <label htmlFor="client-parent-group">Parent Group</label>
-                <input
-                  id="client-parent-group"
-                  className="field"
-                  placeholder="Enter parent group"
-                  value={draft.parentGroup}
-                  onChange={(event) => update("parentGroup", event.target.value)}
-                />
-              </div>
-              <div className="form-row">
-                <label htmlFor="client-since">Client Since</label>
-                <DateField
-                  id="client-since"
-                  value={draft.clientSince}
-                  onChange={(value) => update("clientSince", value)}
-                />
-              </div>
-            </div>
-          </section>
-
-          <section className={`client-form-section ${statusError || clientStatusError ? "is-invalid" : ""}`}>
-            <div className="client-form-section-head">
-              <strong>
-                Status <span className="field-required">*</span>
-              </strong>
-              <span>Record and banking relationship</span>
-            </div>
-            <div className="client-form-grid">
-              <div className="form-row">
-                <label>
-                  Status <span className="field-required">*</span>
-                </label>
-                <ChoiceField
-                  name="status"
-                  options={ACCOUNT_STATUS_OPTIONS}
-                  value={draft.status}
-                  onChange={(next) => update("status", next)}
-                  ariaLabel="Status"
-                  invalid={statusError}
-                  getOptionClass={(option) => `choice-chip-account-status choice-chip-account-status-${optionSlug(option)}`}
-                />
-                {statusError ? <p className="field-error">Status is required.</p> : null}
-              </div>
-              <div className="form-row">
-                <label>
-                  Client Status <span className="field-required">*</span>
-                </label>
-                <ChoiceField
-                  name="clientStatus"
-                  options={CLIENT_STATUS_OPTIONS}
-                  value={draft.clientStatus}
-                  onChange={(next) => update("clientStatus", next)}
-                  ariaLabel="Client Status"
-                  invalid={clientStatusError}
-                  groupClassName="choice-group-status"
-                  getOptionClass={(option) => `choice-chip-status-${option.toLowerCase()}`}
-                />
-                {clientStatusError ? <p className="field-error">Client Status is required.</p> : null}
-              </div>
-              <div className="form-row">
-                <label>Segment</label>
-                <ChoiceField
-                  name="segment"
-                  options={SEGMENT_OPTIONS}
-                  value={draft.segment}
-                  onChange={(next) => update("segment", next)}
-                  ariaLabel="Segment"
-                />
-              </div>
-            </div>
-          </section>
-
-          <section className="client-form-section">
-            <div className="client-form-section-head">
-              <strong>Classification</strong>
-              <span>Industry, rating and risk</span>
-            </div>
-            <div className="client-form-grid">
-              <div className="form-row">
-                <label>Industry</label>
-                <ChoiceField
-                  name="industry"
-                  options={INDUSTRY_OPTIONS}
-                  value={draft.industry}
-                  onChange={(next) => update("industry", next)}
-                  ariaLabel="Industry"
-                />
-              </div>
-              <div className="form-row">
-                <label>Rating</label>
-                <ChoiceField
-                  name="rating"
-                  options={RATING_OPTIONS}
-                  value={draft.rating}
-                  onChange={(next) => update("rating", next)}
-                  ariaLabel="Rating"
-                />
-              </div>
-              <div className="form-row">
-                <label>Risk Rating</label>
-                <RiskRatingField
-                  value={draft.riskRating}
-                  onChange={(next) => update("riskRating", next)}
-                />
-              </div>
-              <div className="form-row">
-                <label>KYC Status</label>
-                <ChoiceField
-                  name="kycStatus"
-                  options={KYC_STATUS_OPTIONS}
-                  value={draft.kycStatus}
-                  onChange={(next) => update("kycStatus", next)}
-                  ariaLabel="KYC Status"
-                  getOptionClass={(option) => `choice-chip-kyc choice-chip-kyc-${optionSlug(option)}`}
-                  variant="labels"
-                />
-              </div>
-            </div>
-          </section>
-
-          <section className="client-form-section">
-            <div className="client-form-section-head">
-              <strong>Location & Entity</strong>
-              <span>Region and legal profile</span>
-            </div>
-            <div className="client-form-grid">
-              <div className="form-row">
-                <label>Region</label>
-                <ChoiceField
-                  name="region"
-                  options={REGION_OPTIONS}
-                  value={draft.region}
-                  onChange={(next) => update("region", next)}
-                  ariaLabel="Region"
-                />
-              </div>
-              <div className="form-row">
-                <label>Legal Entity Type</label>
-                <ChoiceField
-                  name="legalEntityType"
-                  options={LEGAL_ENTITY_OPTIONS}
-                  value={draft.legalEntityType}
-                  onChange={(next) => update("legalEntityType", next)}
-                  ariaLabel="Legal Entity Type"
-                />
-              </div>
-              <div className="form-row">
-                <label htmlFor="client-country">Country</label>
-                <input
-                  id="client-country"
-                  className="field"
-                  placeholder="Enter country"
-                  value={draft.country}
-                  onChange={(event) => update("country", event.target.value)}
-                />
-              </div>
-              <div className="form-row">
-                <label htmlFor="client-city">City</label>
-                <input
-                  id="client-city"
-                  className="field"
-                  placeholder="Enter city"
-                  value={draft.city}
-                  onChange={(event) => update("city", event.target.value)}
-                />
-              </div>
-              <div className="form-row client-form-span-2">
-                <label htmlFor="client-address">Address</label>
-                <input
-                  id="client-address"
-                  className="field"
-                  placeholder="Enter address"
-                  value={draft.address}
-                  onChange={(event) => update("address", event.target.value)}
-                />
-              </div>
-            </div>
-          </section>
-
-          <section className="client-form-section">
-            <div className="client-form-section-head">
-              <strong>Financial Profile</strong>
-              <span>Scale and credit</span>
-            </div>
-            <div className="client-form-grid">
-              <div className="form-row">
-                <label htmlFor="client-annual-revenue">Annual Revenue</label>
-                <input
-                  id="client-annual-revenue"
-                  className="field"
-                  placeholder="e.g. HKD 120M"
-                  value={draft.annualRevenue}
-                  onChange={(event) => update("annualRevenue", event.target.value)}
-                />
-              </div>
-              <div className="form-row">
-                <label htmlFor="client-credit-limit">Credit Limit</label>
-                <input
-                  id="client-credit-limit"
-                  className="field"
-                  placeholder="e.g. HKD 20M"
-                  value={draft.creditLimit}
-                  onChange={(event) => update("creditLimit", event.target.value)}
-                />
-              </div>
-              <div className="form-row">
-                <label htmlFor="client-employees">Employees</label>
-                <input
-                  id="client-employees"
-                  className="field"
-                  placeholder="Enter employee count"
-                  value={draft.employeeCount}
-                  onChange={(event) => update("employeeCount", event.target.value)}
-                />
-              </div>
-            </div>
-          </section>
-
-          <section className="client-form-section">
-            <div className="client-form-section-head">
-              <strong>Primary Identification</strong>
-              <span>ID type and number</span>
-            </div>
-            <div className="client-form-grid">
-              <div className="form-row">
-                <label>Primary ID Type</label>
-                <ChoiceField
-                  name="primaryIdType"
-                  options={PRIMARY_ID_TYPE_OPTIONS}
-                  value={draft.primaryIdType}
-                  onChange={(next) => update("primaryIdType", next)}
-                  ariaLabel="Primary ID Type"
-                  groupClassName="choice-group-id-type"
-                  getOptionClass={(option) => `choice-chip-id-${primaryIdTypeClass(option)}`}
-                />
-              </div>
-              <div className="form-row">
-                <label htmlFor="client-primary-id-number">Primary ID Number</label>
-                <input
-                  id="client-primary-id-number"
-                  className="field"
-                  placeholder="Enter primary ID number"
-                  value={draft.primaryIdNumber}
-                  onChange={(event) => update("primaryIdNumber", event.target.value)}
-                />
-              </div>
-            </div>
-          </section>
+          <h2>{mode === "create" ? "Create Client" : account.companyName.trim() || "Edit Client"}</h2>
         </div>
+      </header>
 
-        <footer className="client-form-footer">
-          <button type="button" className="secondary-button" onClick={onClose}>
-            Cancel
-          </button>
-          <button type="button" className="primary-button" onClick={handleSave}>
-            Save
-          </button>
-        </footer>
-      </section>
-    </div>
+      <div className="client-form-body">
+        <section className="client-form-section">
+          <div className="client-form-section-head">
+            <strong>Company</strong>
+            <span>Basic client details</span>
+          </div>
+          <div className="client-form-grid">
+            <div className={`form-row ${companyNameError ? "is-invalid" : ""}`}>
+              <label htmlFor="client-company-name">
+                Company Name <span className="field-required">*</span>
+              </label>
+              <input
+                id="client-company-name"
+                className={`field ${companyNameError ? "is-invalid" : ""}`}
+                placeholder="Enter company name"
+                value={draft.companyName}
+                aria-required="true"
+                aria-invalid={companyNameError}
+                onChange={(event) => update("companyName", event.target.value)}
+              />
+              {companyNameError ? <p className="field-error">Company Name is required.</p> : null}
+            </div>
+            <div className="form-row">
+              <label htmlFor="client-rm">Relationship Manager</label>
+              <input
+                id="client-rm"
+                className="field"
+                placeholder="Enter relationship manager name"
+                value={draft.relationshipManager}
+                onChange={(event) => update("relationshipManager", event.target.value)}
+              />
+            </div>
+            <div className="form-row">
+              <label htmlFor="client-phone">Phone</label>
+              <input
+                id="client-phone"
+                className="field"
+                type="tel"
+                placeholder="Enter phone number"
+                value={draft.phone}
+                onChange={(event) => update("phone", event.target.value)}
+              />
+            </div>
+            <div className="form-row">
+              <label htmlFor="client-email">Email</label>
+              <input
+                id="client-email"
+                className="field"
+                type="email"
+                placeholder="Enter email"
+                value={draft.email}
+                onChange={(event) => update("email", event.target.value)}
+              />
+            </div>
+            <div className="form-row">
+              <label htmlFor="client-website">Website</label>
+              <input
+                id="client-website"
+                className="field"
+                placeholder="https://"
+                value={draft.website}
+                onChange={(event) => update("website", event.target.value)}
+              />
+            </div>
+            <div className="form-row">
+              <label htmlFor="client-sic">SIC Code</label>
+              <input
+                id="client-sic"
+                className="field"
+                placeholder="Enter SIC code"
+                value={draft.sicCode}
+                onChange={(event) => update("sicCode", event.target.value)}
+              />
+            </div>
+            <div className="form-row">
+              <label htmlFor="client-parent-group">Parent Group</label>
+              <input
+                id="client-parent-group"
+                className="field"
+                placeholder="Enter parent group"
+                value={draft.parentGroup}
+                onChange={(event) => update("parentGroup", event.target.value)}
+              />
+            </div>
+            <div className="form-row">
+              <label htmlFor="client-since">Client Since</label>
+              <DateField
+                id="client-since"
+                value={draft.clientSince}
+                onChange={(value) => update("clientSince", value)}
+              />
+            </div>
+          </div>
+        </section>
+
+        <section className={`client-form-section ${statusError || clientStatusError ? "is-invalid" : ""}`}>
+          <div className="client-form-section-head">
+            <strong>
+              Status <span className="field-required">*</span>
+            </strong>
+            <span>Record and banking relationship</span>
+          </div>
+          <div className="client-form-grid">
+            <div className="form-row">
+              <label>
+                Status <span className="field-required">*</span>
+              </label>
+              <ChoiceField
+                name="status"
+                options={ACCOUNT_STATUS_OPTIONS}
+                value={draft.status}
+                onChange={(next) => update("status", next)}
+                ariaLabel="Status"
+                invalid={statusError}
+                getOptionClass={(option) => `choice-chip-account-status choice-chip-account-status-${optionSlug(option)}`}
+              />
+              {statusError ? <p className="field-error">Status is required.</p> : null}
+            </div>
+            <div className="form-row">
+              <label>
+                Client Status <span className="field-required">*</span>
+              </label>
+              <ChoiceField
+                name="clientStatus"
+                options={CLIENT_STATUS_OPTIONS}
+                value={draft.clientStatus}
+                onChange={(next) => update("clientStatus", next)}
+                ariaLabel="Client Status"
+                invalid={clientStatusError}
+                groupClassName="choice-group-status"
+                getOptionClass={(option) => `choice-chip-status-${option.toLowerCase()}`}
+              />
+              {clientStatusError ? <p className="field-error">Client Status is required.</p> : null}
+            </div>
+            <div className="form-row">
+              <label>Segment</label>
+              <ChoiceField
+                name="segment"
+                options={SEGMENT_OPTIONS}
+                value={draft.segment}
+                onChange={(next) => update("segment", next)}
+                ariaLabel="Segment"
+              />
+            </div>
+          </div>
+        </section>
+
+        <section className="client-form-section">
+          <div className="client-form-section-head">
+            <strong>Classification</strong>
+            <span>Industry, rating and risk</span>
+          </div>
+          <div className="client-form-grid">
+            <div className="form-row">
+              <label>Industry</label>
+              <ChoiceField
+                name="industry"
+                options={INDUSTRY_OPTIONS}
+                value={draft.industry}
+                onChange={(next) => update("industry", next)}
+                ariaLabel="Industry"
+              />
+            </div>
+            <div className="form-row">
+              <label>Rating</label>
+              <ChoiceField
+                name="rating"
+                options={RATING_OPTIONS}
+                value={draft.rating}
+                onChange={(next) => update("rating", next)}
+                ariaLabel="Rating"
+              />
+            </div>
+            <div className="form-row">
+              <label>Risk Rating</label>
+              <RiskRatingField
+                value={draft.riskRating}
+                onChange={(next) => update("riskRating", next)}
+              />
+            </div>
+            <div className="form-row">
+              <label>KYC Status</label>
+              <ChoiceField
+                name="kycStatus"
+                options={KYC_STATUS_OPTIONS}
+                value={draft.kycStatus}
+                onChange={(next) => update("kycStatus", next)}
+                ariaLabel="KYC Status"
+                getOptionClass={(option) => `choice-chip-kyc choice-chip-kyc-${optionSlug(option)}`}
+                variant="labels"
+              />
+            </div>
+          </div>
+        </section>
+
+        <section className="client-form-section">
+          <div className="client-form-section-head">
+            <strong>Location & Entity</strong>
+            <span>Region and legal profile</span>
+          </div>
+          <div className="client-form-grid">
+            <div className="form-row">
+              <label>Region</label>
+              <ChoiceField
+                name="region"
+                options={REGION_OPTIONS}
+                value={draft.region}
+                onChange={(next) => update("region", next)}
+                ariaLabel="Region"
+              />
+            </div>
+            <div className="form-row">
+              <label>Legal Entity Type</label>
+              <ChoiceField
+                name="legalEntityType"
+                options={LEGAL_ENTITY_OPTIONS}
+                value={draft.legalEntityType}
+                onChange={(next) => update("legalEntityType", next)}
+                ariaLabel="Legal Entity Type"
+              />
+            </div>
+            <div className="form-row">
+              <label htmlFor="client-country">Country</label>
+              <input
+                id="client-country"
+                className="field"
+                placeholder="Enter country"
+                value={draft.country}
+                onChange={(event) => update("country", event.target.value)}
+              />
+            </div>
+            <div className="form-row">
+              <label htmlFor="client-city">City</label>
+              <input
+                id="client-city"
+                className="field"
+                placeholder="Enter city"
+                value={draft.city}
+                onChange={(event) => update("city", event.target.value)}
+              />
+            </div>
+            <div className="form-row client-form-span-2">
+              <label htmlFor="client-address">Address</label>
+              <input
+                id="client-address"
+                className="field"
+                placeholder="Enter address"
+                value={draft.address}
+                onChange={(event) => update("address", event.target.value)}
+              />
+            </div>
+          </div>
+        </section>
+
+        <section className="client-form-section">
+          <div className="client-form-section-head">
+            <strong>Financial Profile</strong>
+            <span>Scale and credit</span>
+          </div>
+          <div className="client-form-grid">
+            <div className="form-row">
+              <label htmlFor="client-annual-revenue">Annual Revenue</label>
+              <input
+                id="client-annual-revenue"
+                className="field"
+                placeholder="e.g. HKD 120M"
+                value={draft.annualRevenue}
+                onChange={(event) => update("annualRevenue", event.target.value)}
+              />
+            </div>
+            <div className="form-row">
+              <label htmlFor="client-credit-limit">Credit Limit</label>
+              <input
+                id="client-credit-limit"
+                className="field"
+                placeholder="e.g. HKD 20M"
+                value={draft.creditLimit}
+                onChange={(event) => update("creditLimit", event.target.value)}
+              />
+            </div>
+            <div className="form-row">
+              <label htmlFor="client-employees">Employees</label>
+              <input
+                id="client-employees"
+                className="field"
+                placeholder="Enter employee count"
+                value={draft.employeeCount}
+                onChange={(event) => update("employeeCount", event.target.value)}
+              />
+            </div>
+          </div>
+        </section>
+
+        <section className="client-form-section">
+          <div className="client-form-section-head">
+            <strong>Primary Identification</strong>
+            <span>ID type and number</span>
+          </div>
+          <div className="client-form-grid">
+            <div className="form-row">
+              <label>Primary ID Type</label>
+              <ChoiceField
+                name="primaryIdType"
+                options={PRIMARY_ID_TYPE_OPTIONS}
+                value={draft.primaryIdType}
+                onChange={(next) => update("primaryIdType", next)}
+                ariaLabel="Primary ID Type"
+                groupClassName="choice-group-id-type"
+                getOptionClass={(option) => `choice-chip-id-${primaryIdTypeClass(option)}`}
+              />
+            </div>
+            <div className="form-row">
+              <label htmlFor="client-primary-id-number">Primary ID Number</label>
+              <input
+                id="client-primary-id-number"
+                className="field"
+                placeholder="Enter primary ID number"
+                value={draft.primaryIdNumber}
+                onChange={(event) => update("primaryIdNumber", event.target.value)}
+              />
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <footer className="client-form-footer">
+        <button type="button" className="secondary-button" onClick={onClose}>
+          Cancel
+        </button>
+        <button type="button" className="primary-button" onClick={handleSave}>
+          Save
+        </button>
+      </footer>
+    </section>
   );
 }
 
@@ -4021,92 +4024,93 @@ function AccountsWorkspace({
     return value == null || value === "" ? "" : String(value);
   }
 
-  return (
-    <>
-      <RecordListShell
-        title={view}
-        filters={[
-          "Company Name",
-          "Status",
-          "Client Status",
-          "Segment",
-          "Relationship Manager",
-          "Phone",
-          "Email",
-          "SIC Code",
-          "Industry",
-          "Rating",
-          "Risk Rating",
-          "KYC Status",
-          "Region",
-          "Legal Entity",
-          "Country",
-          "City",
-          "Annual Revenue",
-          "Credit Limit",
-          "Parent Group",
-          "Primary ID Type",
-          "Primary ID Number",
-        ]}
-        data={viewRows}
-        columns={accountColumns}
-        getCellValue={getAccountCellValue}
-        onCreate={() => {
-          setEditing({ account: createEmptyAccount(), mode: "create" });
-          setReturnToHome(false);
-        }}
-        renderRows={(visibleRows, orderedColumns) => (
-          <tbody>
-            {visibleRows.map((account) => (
-              <tr
-                key={account.id}
-                className="is-row-interactive"
-                onDoubleClick={() => {
-                  setEditing({ account: { ...account }, mode: "edit" });
-                  setReturnToHome(false);
-                }}
-              >
-                {orderedColumns.map((column) => {
-                  if (column.key === "select") {
-                    return (
-                      <td key={column.key} className="is-row-actions-col">
-                        {renderAccountCell(account, column)}
-                      </td>
-                    );
-                  }
-                  if (column.key === "riskRating") {
-                    const raw = account.riskRating;
-                    return <RiskRatingTd key={column.key} value={raw} />;
-                  }
-                  if (column.key === "clientStatus") {
-                    const raw = account.clientStatus;
-                    return <ClientStatusTd key={column.key} value={raw} />;
-                  }
-                  if (column.key === "kycStatus") {
-                    const raw = account.kycStatus;
-                    return <KycStatusTd key={column.key} value={raw} />;
-                  }
-                  if (column.type === "enum" && column.colorable !== false) {
-                    const raw = account[column.key as keyof Account];
-                    const value = raw == null || raw === "" ? null : String(raw);
-                    return <EnumFillTd key={column.key} column={column} value={value} />;
-                  }
-                  return <td key={column.key}>{renderAccountCell(account, column)}</td>;
-                })}
-              </tr>
-            ))}
-          </tbody>
-        )}
+  if (editing) {
+    return (
+      <ClientFormPage
+        account={editing.account}
+        mode={editing.mode}
+        onClose={dismissForm}
+        onSave={handleSave}
       />
-      {editing ? (
-        <ClientFormModal
-          account={editing.account}
-          mode={editing.mode}
-          onClose={dismissForm}
-          onSave={handleSave}
-        />
-      ) : null}
-    </>
+    );
+  }
+
+  return (
+    <RecordListShell
+      title={view}
+      filters={[
+        "Company Name",
+        "Status",
+        "Client Status",
+        "Segment",
+        "Relationship Manager",
+        "Phone",
+        "Email",
+        "SIC Code",
+        "Industry",
+        "Rating",
+        "Risk Rating",
+        "KYC Status",
+        "Region",
+        "Legal Entity",
+        "Country",
+        "City",
+        "Annual Revenue",
+        "Credit Limit",
+        "Parent Group",
+        "Primary ID Type",
+        "Primary ID Number",
+      ]}
+      data={viewRows}
+      columns={accountColumns}
+      getCellValue={getAccountCellValue}
+      onCreate={() => {
+        setEditing({ account: createEmptyAccount(), mode: "create" });
+        setReturnToHome(false);
+      }}
+      renderRows={(visibleRows, orderedColumns) => (
+        <tbody>
+          {visibleRows.map((account) => (
+            <tr
+              key={account.id}
+              className="is-row-interactive"
+              onDoubleClick={() => {
+                setEditing({ account: { ...account }, mode: "edit" });
+                setReturnToHome(false);
+              }}
+            >
+              {orderedColumns.map((column) => {
+                if (column.key === "select") {
+                  return (
+                    <td key={column.key} className="is-row-actions-col">
+                      {renderAccountCell(account, column)}
+                    </td>
+                  );
+                }
+                if (column.key === "riskRating") {
+                  const raw = account.riskRating;
+                  return <RiskRatingTd key={column.key} value={raw} />;
+                }
+                if (column.key === "clientStatus") {
+                  const raw = account.clientStatus;
+                  return <ClientStatusTd key={column.key} value={raw} />;
+                }
+                if (column.key === "kycStatus") {
+                  const raw = account.kycStatus;
+                  return <KycStatusTd key={column.key} value={raw} />;
+                }
+                if (column.type === "enum" && column.colorable !== false) {
+                  const raw = account[column.key as keyof Account];
+                  const value = raw == null || raw === "" ? null : String(raw);
+                  return <EnumFillTd key={column.key} column={column} value={value} />;
+                }
+                return <td key={column.key}>{renderAccountCell(account, column)}</td>;
+              })}
+            </tr>
+          ))}
+        </tbody>
+      )}
+    />
   );
 }
 
@@ -4968,7 +4972,6 @@ function LoanFormModal({
           <div>
             <p className="client-form-eyebrow">{config.label}</p>
             <h2>{mode === "create" ? `Create ${config.recordLabel}` : `Edit ${config.recordLabel}`}</h2>
-            <p className="client-form-subtitle">Capture facility terms, pricing, credit risk and key lifecycle dates.</p>
           </div>
           <button type="button" className="icon-button" aria-label="Close" onClick={onClose}>
             <X size={16} />
@@ -5731,9 +5734,6 @@ function CampaignFormModal({
           <div>
             <p className="client-form-eyebrow">Campaigns</p>
             <h2>{mode === "create" ? "Create Campaign" : "Edit Campaign"}</h2>
-            <p className="client-form-subtitle">
-              Plan banking marketing campaigns, track budget, response and lead conversion.
-            </p>
           </div>
           <button type="button" className="icon-button" aria-label="Close" onClick={onClose}>
             <X size={16} />
@@ -6324,9 +6324,6 @@ function UserFormModal({
           <div>
             <p className="client-form-eyebrow">Users</p>
             <h2>{mode === "create" ? "Create User" : "Edit User"}</h2>
-            <p className="client-form-subtitle">
-              Manage CRM login identity, organization assignment, and access profile.
-            </p>
           </div>
           <button type="button" className="icon-button" aria-label="Close" onClick={onClose}>
             <X size={16} />
@@ -6801,8 +6798,7 @@ const contactColumns: ColumnDef[] = [
     header: "Status",
     type: "enum",
     enumOptions: [...CONTACT_STATUS_OPTIONS],
-    colorGroup: "soft",
-    optionColors: { Active: 0, Inactive: 6 },
+    colorable: false,
   },
   {
     key: "role",
@@ -6952,9 +6948,6 @@ function ContactFormModal({
           <div>
             <p className="client-form-eyebrow">Contacts</p>
             <h2>{mode === "create" ? "Create Contact" : "Edit Contact"}</h2>
-            <p className="client-form-subtitle">
-              Capture client counterparties for RM coverage, lending and relationship activities.
-            </p>
           </div>
           <button type="button" className="icon-button" aria-label="Close" onClick={onClose}>
             <X size={16} />

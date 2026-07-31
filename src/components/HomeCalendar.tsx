@@ -418,7 +418,7 @@ function CalendarEventChip({
   );
 }
 
-const CELL_VISIBLE_EVENTS = 1;
+const CELL_VISIBLE_EVENTS = 2;
 
 function DayOverflowMore({
   dateLabel,

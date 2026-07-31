@@ -24,9 +24,14 @@ html[data-mode="day"] {
   --warning: #f4a11a;
   --shadow: 0 1px 2px rgb(15 15 15 / 4%), 0 1px 3px rgb(15 15 15 / 3%);
   --account-header: #a31d31;
+  --chart-axis: #55534f;
+  --chart-grid: #dcdcda;
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
+  --scrollbar-size: 10px;
+  --scrollbar-thumb: rgb(26 26 25 / 22%);
+  --scrollbar-thumb-hover: rgb(26 26 25 / 38%);
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -46,11 +51,44 @@ html[data-mode="night"] {
   --nav-active: rgb(255 255 255 / 14%);
   --nav-hover: rgb(255 255 255 / 9%);
   --brand-soft: #3a3642;
+  --chart-axis: #b6b3ab;
+  --chart-grid: #4e4d58;
   --shadow: 0 1px 2px rgb(0 0 0 / 18%), 0 8px 24px rgb(0 0 0 / 14%);
+  --scrollbar-thumb: rgb(255 255 255 / 20%);
+  --scrollbar-thumb-hover: rgb(255 255 255 / 34%);
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* Thin rounded scrollbars everywhere. Override --scrollbar-thumb on a scroll
+   container to retint it (see .sidebar-scroll). */
+* {
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  height: var(--scrollbar-size);
+  width: var(--scrollbar-size);
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  background-clip: padding-box;
 }
 
 body {
@@ -166,25 +204,12 @@ body.is-sidebar-resizing * {
 }
 
 .sidebar-scroll {
+  --scrollbar-thumb: rgb(255 255 255 / 24%);
+  --scrollbar-thumb-hover: rgb(255 255 255 / 40%);
   flex: 1;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  scrollbar-color: rgb(255 255 255 / 22%) transparent;
-  scrollbar-width: thin;
-}
-
-.sidebar-scroll::-webkit-scrollbar {
-  width: 6px;
-}
-
-.sidebar-scroll::-webkit-scrollbar-thumb {
-  background: rgb(255 255 255 / 22%);
-  border-radius: 999px;
-}
-
-.sidebar-scroll::-webkit-scrollbar-track {
-  background: transparent;
 }
 
 .sidebar.is-collapsed {
@@ -1416,7 +1441,7 @@ html[data-mode="night"] .mode-toggle {
   height: calc(100vh - 46px);
   max-height: calc(100vh - 46px);
   overflow: hidden;
-  padding-bottom: 10px;
+  padding-bottom: 12px;
 }
 
 /* List views: keep chrome fixed; scroll only inside the table */
@@ -1424,6 +1449,14 @@ html[data-mode="night"] .mode-toggle {
   height: calc(100vh - 46px);
   max-height: calc(100vh - 46px);
   /* clip avoids creating a scrollport that breaks sticky thead */
+  overflow: clip;
+  padding-bottom: 10px;
+}
+
+/* Inline record forms: keep header and footer fixed, scroll only the fields */
+.content:has(.client-form-page) {
+  height: calc(100vh - 46px);
+  max-height: calc(100vh - 46px);
   overflow: clip;
   padding-bottom: 10px;
 }
@@ -1625,7 +1658,7 @@ html[data-mode="night"] .mode-toggle {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
   height: 100%;
   min-height: 0;
 }
@@ -1637,36 +1670,29 @@ html[data-mode="night"] .mode-toggle {
   flex-wrap: wrap;
   gap: 6px 10px;
   min-width: 0;
-  padding: 0 2px;
+  padding: 2px 4px 0;
 }
 
 .home-banner-copy {
   align-items: baseline;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 12px;
+  gap: 6px 14px;
   min-width: 0;
 }
 
-.home-quick-access-item.is-training .home-quick-access-copy strong {
+.home-quick-access-item.is-training .home-quick-access-label {
   color: var(--brand);
 }
 
-html[data-mode="night"] .home-quick-access-item.is-training .home-quick-access-copy strong {
+html[data-mode="night"] .home-quick-access-item.is-training .home-quick-access-label {
   color: color-mix(in srgb, var(--brand-mark, #cf4651) 72%, #fff);
 }
 
+/* Panel chrome comes from .home-quad; this only owns the module rail */
 .home-quick-access {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  box-shadow: var(--shadow);
-  display: flex;
-  flex-direction: column;
   min-height: 0;
   min-width: 0;
-  overflow: hidden;
-  padding: 9px 10px 10px;
 }
 
 .home-quick-access-head {
@@ -1674,18 +1700,20 @@ html[data-mode="night"] .home-quick-access-item.is-training .home-quick-access-c
   display: flex;
   gap: 8px;
   justify-content: space-between;
-  margin: 0 2px 7px;
+  margin-bottom: 8px;
+  min-width: 0;
 }
 
 .home-quick-access-list {
   display: grid;
   flex: 1;
-  gap: 6px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  grid-auto-rows: max-content;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
   min-height: 0;
   overflow: auto;
   /* Room for hover lift (translateY -1px) + border so first/last row aren't clipped */
-  padding: 2px 1px;
+  padding: 1px;
   scrollbar-width: thin;
 }
 
@@ -1697,10 +1725,10 @@ html[data-mode="night"] .home-quick-access-item.is-training .home-quick-access-c
   color: var(--text);
   cursor: pointer;
   display: grid;
-  gap: 7px;
-  grid-template-columns: 28px minmax(0, 1fr) 14px;
+  gap: 6px;
+  grid-template-columns: 20px minmax(0, 1fr);
   min-width: 0;
-  padding: 7px;
+  padding: 4px 7px;
   text-align: left;
   transition:
     background 0.15s ease,
@@ -1723,99 +1751,52 @@ html[data-mode="night"] .home-quick-access-item.is-training .home-quick-access-c
   align-items: center;
   background: color-mix(in srgb, var(--brand-soft) 76%, var(--panel));
   border: 1px solid color-mix(in srgb, var(--brand) 14%, transparent);
-  border-radius: 7px;
+  border-radius: 6px;
   color: var(--brand);
   display: flex;
-  height: 28px;
+  height: 20px;
   justify-content: center;
-  width: 28px;
+  width: 20px;
 }
 
-.home-quick-access-copy {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
+/* Icons are authored at 18px; scale them down to fit the compact chip. */
+.home-quick-access-icon svg {
+  height: 14px;
+  width: 14px;
 }
 
-.home-quick-access-copy strong,
-.home-quick-access-copy > span {
+.home-quick-access-label {
+  font-size: 11.5px;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.home-quick-access-copy strong {
-  font-size: 11.5px;
-  font-weight: 650;
-}
-
-.home-quick-access-copy > span {
-  color: var(--muted);
-  font-size: 10.5px;
-  margin-top: 1px;
-}
-
-.home-quick-access-arrow {
-  color: var(--muted);
-  transition: color 0.15s ease, transform 0.15s ease;
-}
-
-.home-quick-access-item:hover .home-quick-access-arrow {
-  color: var(--brand);
-  transform: translateX(1px);
-}
-
 .home-cross {
-  --home-cross-gap: 12px;
+  --home-cross-gap: 14px;
   display: grid;
   flex: 1;
   gap: var(--home-cross-gap);
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(300px, 0.92fr) minmax(0, 1.08fr);
   min-height: 0;
-  position: relative;
 }
 
 .home-cross-col {
   display: grid;
   gap: var(--home-cross-gap);
-  grid-template-rows: repeat(2, minmax(0, 1fr));
   min-height: 0;
   min-width: 0;
 }
 
+/* Attention sized to content (capped); loans closing fills the rest */
+.home-cross-left {
+  grid-template-rows: minmax(148px, 0.72fr) minmax(0, 1.28fr);
+}
+
+/* Calendar takes the height it needs; quick access is a short strip beneath it */
 .home-cross-right {
-  position: relative;
-}
-
-.home-cross::before,
-.home-cross::after,
-.home-cross-right::before {
-  background: color-mix(in srgb, var(--line) 88%, var(--brand) 12%);
-  content: "";
-  pointer-events: none;
-  position: absolute;
-  z-index: 1;
-}
-
-.home-cross::before {
-  height: 1px;
-  left: 4%;
-  right: calc(50% + var(--home-cross-gap) / 2);
-  top: calc(50% - 0.5px);
-}
-
-.home-cross-right::before {
-  height: 1px;
-  left: 0;
-  right: 4%;
-  top: calc(50% - 0.5px);
-}
-
-.home-cross::after {
-  bottom: 4%;
-  left: calc(50% - 0.5px);
-  top: 4%;
-  width: 1px;
+  grid-template-rows: minmax(0, 1fr) clamp(100px, 19%, 150px);
 }
 
 .home-quad {
@@ -1829,13 +1810,14 @@ html[data-mode="night"] .home-quick-access-item.is-training .home-quick-access-c
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  padding: 12px 12px 10px;
+  padding: 12px 14px 12px;
   position: relative;
   z-index: 2;
 }
 
 .home-quad-left {
   justify-content: flex-start;
+  max-height: 100%;
 }
 
 .home-quad-label {
@@ -1852,7 +1834,7 @@ html[data-mode="night"] .home-quick-access-item.is-training .home-quick-access-c
   display: flex;
   gap: 10px;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   min-width: 0;
 }
 
@@ -1876,7 +1858,7 @@ html[data-mode="night"] .home-quick-access-item.is-training .home-quick-access-c
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   min-height: 0;
   overflow: auto;
 }
@@ -1948,8 +1930,9 @@ html[data-mode="night"] .home-quick-access-item.is-training .home-quick-access-c
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 8px;
-  margin-bottom: 8px;
+  gap: 5px 8px;
+  margin-bottom: 10px;
+  min-width: 0;
 }
 
 .home-pipeline-summary > strong:first-child {
@@ -2073,8 +2056,9 @@ html[data-mode="night"] .home-quick-access-item.is-training .home-quick-access-c
   background:
     radial-gradient(circle at top right, color-mix(in srgb, var(--brand-soft) 70%, transparent), transparent 48%),
     var(--panel);
-  gap: 6px;
-  padding: 10px 12px 10px;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px 14px;
 }
 
 .home-calendar-section-label {
@@ -2496,10 +2480,6 @@ button.pill {
   text-align: left;
 }
 
-.home-cal-week-day:has(.home-cal-more) {
-  padding-bottom: 20px;
-}
-
 .home-cal-week-day:has(.home-cal-holiday-name:hover),
 .home-cal-week-day:has(.home-cal-event:hover),
 .home-cal-week-day:has(.home-cal-event:focus-visible),
@@ -2575,7 +2555,7 @@ button.pill {
 
 .home-cal-week-day-events {
   display: flex;
-  flex: 1;
+  flex: 0 1 auto;
   flex-direction: column;
   gap: 3px;
   min-height: 0;
@@ -2641,10 +2621,6 @@ button.pill {
   text-align: left;
   transition: background 0.12s ease;
   width: 100%;
-}
-
-.home-cal-day:has(.home-cal-more) {
-  padding-bottom: 16px;
 }
 
 .home-cal-day:has(.home-cal-holiday-name:hover),
@@ -2788,7 +2764,7 @@ button.pill {
 
 .home-cal-day-events {
   display: flex;
-  flex: 1;
+  flex: 0 1 auto;
   flex-direction: column;
   gap: 2px;
   min-height: 0;
@@ -2897,23 +2873,16 @@ button.pill {
   font-weight: 600;
   gap: 1px;
   height: 12px;
-  left: 4px;
   line-height: 12px;
   margin: 0;
-  max-width: calc(100% - 8px);
+  max-width: 100%;
   min-width: 0;
   padding: 0;
-  position: absolute;
-  bottom: 2px;
+  /* Sits in flow directly under the visible chips, not pinned to the cell floor. */
+  position: relative;
   text-align: left;
   width: fit-content;
   z-index: 2;
-}
-
-.home-cal-week-day > .home-cal-more {
-  bottom: 4px;
-  left: 6px;
-  max-width: calc(100% - 12px);
 }
 
 .home-cal-more > span:first-child {
@@ -3354,26 +3323,25 @@ button.pill {
 
   .home-cross {
     grid-template-columns: 1fr;
+    grid-template-rows: auto;
     height: auto;
     min-height: 0;
   }
 
-  .home-cross-col {
+  .home-cross-col,
+  .home-cross-left,
+  .home-cross-right {
     grid-template-rows: auto;
     height: auto;
   }
 
-  .home-cross::before,
-  .home-cross::after,
-  .home-cross-right::before {
-    display: none;
+  .home-quad-left,
+  .home-quad-bl {
+    min-height: 260px;
   }
 
-  .home-quad-left,
-  .home-quad-bl,
-  .home-quad-tr,
-  .home-quad-br {
-    min-height: 280px;
+  .home-quad-tr {
+    min-height: 460px;
   }
 
   .home-calendar-head {
@@ -3391,10 +3359,6 @@ button.pill {
 }
 
 @media (max-width: 720px) {
-  .home-quick-access-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .home-cal-year-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -3414,8 +3378,8 @@ button.pill {
 }
 
 .home-greeting {
-  color: rgb(53, 60, 73);
-  font-size: 14.5px;
+  color: var(--text);
+  font-size: 15px;
   font-weight: 650;
   letter-spacing: -0.02em;
   line-height: 1.2;
@@ -3423,7 +3387,7 @@ button.pill {
 }
 
 html[data-mode="night"] .home-greeting {
-  color: rgb(196, 202, 214);
+  color: var(--text);
 }
 
 .page-title {
@@ -5093,6 +5057,60 @@ html[data-mode="night"] .client-meta-kyc-expired {
   width: min(760px, calc(100vw - 28px));
 }
 
+.client-form-page {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.client-form-back {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--brand);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 600;
+  gap: 2px;
+  letter-spacing: 0.08em;
+  margin: 0 0 3px -6px;
+  padding: 2px 6px 2px 2px;
+  text-transform: uppercase;
+}
+
+.client-form-back:hover {
+  background: var(--brand-soft);
+}
+
+.client-form-page > .client-form-header,
+.client-form-page > .client-form-footer {
+  flex-shrink: 0;
+}
+
+.client-form-page > .client-form-body {
+  align-content: start;
+  flex: 1;
+  min-height: 0;
+  padding: 12px 16px;
+}
+
+.client-form-page .client-form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 1180px) {
+  .client-form-page .client-form-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 .loan-form-probability {
   color: var(--muted);
   font-size: 11px;
@@ -5124,14 +5142,6 @@ html[data-mode="night"] .client-meta-kyc-expired {
   font-weight: 650;
   letter-spacing: -0.03em;
   margin: 0;
-}
-
-.client-form-subtitle {
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.35;
-  margin: 4px 0 0;
-  max-width: 46ch;
 }
 
 .client-form-body {
@@ -5231,21 +5241,25 @@ html[data-mode="night"] .form-row .field-required {
   grid-column: 1 / -1;
 }
 
-.client-form-modal .form-row label {
+.client-form-modal .form-row label,
+.client-form-page .form-row label {
   font-size: 11px;
   margin-bottom: 4px;
 }
 
-.client-form-modal .field {
+.client-form-modal .field,
+.client-form-page .field {
   min-height: 32px;
   padding: 0 10px;
 }
 
-.client-form-modal .date-field {
+.client-form-modal .date-field,
+.client-form-page .date-field {
   padding: 0;
 }
 
-.client-form-modal .date-field-trigger {
+.client-form-modal .date-field-trigger,
+.client-form-page .date-field-trigger {
   min-height: 32px;
   padding: 0 10px;
 }
@@ -6036,9 +6050,9 @@ html[data-mode="night"] .timeline-item::before {
   align-items: center;
   display: flex;
   gap: 0;
-  height: 26px;
+  height: 14px;
   position: relative;
-  width: 160px;
+  width: 92px;
 }
 
 .loan-stage-segment {
@@ -6048,33 +6062,44 @@ html[data-mode="night"] .timeline-item::before {
   border-radius: 0;
   cursor: pointer;
   flex: 1 1 0;
-  height: 26px;
+  height: 14px;
   padding: 0;
   position: relative;
-  transition: height 0.16s ease, flex-grow 0.16s ease, border-radius 0.16s ease;
+  transition: height 0.08s cubic-bezier(0.2, 0, 0.2, 1),
+    flex-grow 0.08s cubic-bezier(0.2, 0, 0.2, 1),
+    border-radius 0.08s cubic-bezier(0.2, 0, 0.2, 1),
+    filter 0.08s cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+/* Widen the hit area vertically so the thin strip is easy to hover. */
+.loan-stage-segment::before {
+  content: "";
+  inset: -7px 0;
+  position: absolute;
 }
 
 .loan-stage-segment.is-first {
-  border-radius: 4px 0 0 4px;
+  border-radius: 2px 0 0 2px;
 }
 
 .loan-stage-segment.is-last {
-  border-radius: 0 4px 4px 0;
+  border-radius: 0 2px 2px 0;
 }
 
 .loan-stage-segment.is-active {
-  border-radius: 4px;
+  border-radius: 2px;
+  filter: saturate(1.12) brightness(1.06);
   flex-grow: 1.45;
-  height: 32px;
+  height: 18px;
   z-index: 3;
 }
 
 .loan-stage-segment.is-first.is-active {
-  border-radius: 4px;
+  border-radius: 2px;
 }
 
 .loan-stage-segment.is-last.is-active {
-  border-radius: 4px;
+  border-radius: 2px;
 }
 
 .loan-stage-tooltip {
@@ -6203,6 +6228,7 @@ html[data-mode="night"] .timeline-item::before {
   border-bottom: 1px solid #d8dce3;
   border-left: 1px solid #d8dce3;
   border-right: 1px solid #d8dce3;
+  border-radius: 0 0 8px 8px;
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -6211,23 +6237,6 @@ html[data-mode="night"] .timeline-item::before {
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 9px;
-  scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent;
-  scrollbar-width: thin;
-}
-
-.loan-kanban-cards::-webkit-scrollbar {
-  width: 7px;
-}
-
-.loan-kanban-cards::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--muted) 38%, transparent);
-  border: 2px solid transparent;
-  border-radius: 999px;
-  background-clip: padding-box;
-}
-
-.loan-kanban-cards::-webkit-scrollbar-track {
-  background: transparent;
 }
 
 .loan-kanban-card {
@@ -6465,11 +6474,20 @@ html[data-mode="night"] .loan-stage-tooltip::after {
     grid-template-columns: 60px 1fr;
   }
 
-  .content:has(.record-layout) {
+  .content:has(.record-layout),
+  .content:has(.client-form-page) {
     height: auto;
     max-height: none;
     overflow: visible;
     padding-bottom: 20px;
+  }
+
+  .client-form-page {
+    flex: none;
+  }
+
+  .client-form-page .client-form-grid {
+    grid-template-columns: 1fr;
   }
 
   .dashboard-grid,
@@ -7178,13 +7196,57 @@ html[data-mode="night"] .loan-stage-tooltip::after {
   padding: 8px 8px 12px;
 }
 
+/* Recharts puts tabindex on the surface and on its z-index layers, so a click leaves a
+   system-accent focus ring around whatever shape was hit */
 .report-card-body .recharts-wrapper:focus,
 .report-card-body .recharts-wrapper:focus-visible,
-.report-card-body .recharts-surface:focus,
-.report-card-body .recharts-surface:focus-visible,
+.report-card-body .recharts-wrapper :focus,
+.report-card-body .recharts-wrapper :focus-visible,
 .report-card-body svg:focus,
 .report-card-body svg:focus-visible {
   outline: none;
+}
+
+/* Recharts hardcodes a white sector stroke, which draws light seams in night mode */
+.report-card-body .recharts-pie .recharts-sector {
+  stroke: var(--panel);
+  stroke-width: 1.5;
+}
+
+.report-card-body .recharts-legend-item-text {
+  font-weight: 500;
+}
+
+.report-card-body .recharts-pie .recharts-shape {
+  transition: opacity 160ms ease var(--report-hover-delay, 80ms);
+}
+
+.report-card-body .recharts-pie:has(.recharts-active-shape) .recharts-shape {
+  opacity: 0.26;
+}
+
+.report-card-body .recharts-pie .recharts-active-shape {
+  filter: drop-shadow(0 3px 8px rgb(0 0 0 / 0.22));
+  transition: filter 160ms ease var(--report-hover-delay, 80ms);
+}
+
+.report-card-body .recharts-inactive-bar {
+  transition: opacity 160ms ease var(--report-hover-delay, 80ms);
+}
+
+/* Recharts portals the hovered bar into its own z-index layer, so scope the fade to the wrapper */
+.report-card-body .recharts-wrapper:has(.recharts-active-bar) .recharts-inactive-bar {
+  opacity: 0.26;
+}
+
+.report-card-body .recharts-active-bar {
+  filter: drop-shadow(0 3px 8px rgb(0 0 0 / 0.22));
+  transition: filter 160ms ease var(--report-hover-delay, 80ms);
+}
+
+/* Fading the other bars replaces the default grey band behind the hovered category */
+.report-card-body .recharts-rectangle.recharts-tooltip-cursor {
+  display: none;
 }
 
 .report-tooltip {
@@ -7195,6 +7257,7 @@ html[data-mode="night"] .loan-stage-tooltip::after {
   font-size: 12px;
   max-width: 240px;
   padding: 8px 10px;
+  pointer-events: none;
 }
 
 .report-tooltip-label {
