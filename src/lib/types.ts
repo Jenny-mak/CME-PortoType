@@ -208,6 +208,8 @@ export type Deal = {
   stage: PipelineStage;
   probability: number;
   remarks: string;
+  /** ISO timestamp of last edit; used for stale-loan notifications. */
+  updatedAt: string;
 };
 
 export type Task = {

@@ -587,10 +587,11 @@ export const deals: Deal[] = [
     drawdownDate: "2026-07-25",
     maturityDate: "2029-07-31",
     closingDate: "2026-07-31",
-    nextReviewDate: "2027-07-31",
+    nextReviewDate: "2026-07-15",
     stage: "Execution",
     probability: 75,
     remarks: "Annual renewal of working capital RCF for manufacturing group treasury.",
+    updatedAt: "2026-06-12T09:00:00.000Z",
   },
   {
     id: "deal-2",
@@ -635,6 +636,7 @@ export const deals: Deal[] = [
     stage: "Evaluation",
     probability: 25,
     remarks: "NTB commercial law firm seeking first RCF with bank guarantee support.",
+    updatedAt: "2026-07-25T10:00:00.000Z",
   },
   {
     id: "deal-3",
@@ -679,6 +681,7 @@ export const deals: Deal[] = [
     stage: "Identification",
     probability: 10,
     remarks: "NNTB SME print media group requesting unsecured capex facility; KYC still pending.",
+    updatedAt: "2026-06-28T11:30:00.000Z",
   },
   {
     id: "deal-4",
@@ -723,6 +726,7 @@ export const deals: Deal[] = [
     stage: "Completion",
     probability: 100,
     remarks: "ETB corporate client; 40% club deal with two partner banks for LC/TR limits.",
+    updatedAt: "2026-07-27T13:40:00.000Z",
   },
   {
     id: "deal-5",
@@ -763,10 +767,11 @@ export const deals: Deal[] = [
     drawdownDate: "",
     maturityDate: "2031-08-05",
     closingDate: "2026-08-05",
-    nextReviewDate: "",
+    nextReviewDate: "2026-07-01",
     stage: "Identification",
     probability: 10,
     remarks: "Asset-backed term loan for container fleet expansion at Kwai Chung terminal.",
+    updatedAt: "2026-07-05T08:15:00.000Z",
   },
   {
     id: "deal-6",
@@ -811,6 +816,7 @@ export const deals: Deal[] = [
     stage: "Approval",
     probability: 50,
     remarks: "NTB healthcare group; facility approved pending first drawdown for Novena campus.",
+    updatedAt: "2026-07-28T09:10:00.000Z",
   },
   {
     id: "deal-7",
@@ -855,6 +861,7 @@ export const deals: Deal[] = [
     stage: "Evaluation",
     probability: 25,
     remarks: "NNTB tech SME; invoice-backed OD pending KYC completion and account activation.",
+    updatedAt: "2026-07-10T14:00:00.000Z",
   },
   {
     id: "deal-8",
@@ -899,6 +906,7 @@ export const deals: Deal[] = [
     stage: "Completion",
     probability: 100,
     remarks: "ETB private banking mortgage secured on Mayfair residential portfolio.",
+    updatedAt: "2026-07-29T15:05:00.000Z",
   },
 ];
 

@@ -3,15 +3,18 @@
 import {
   ArrowDown,
   ArrowUp,
+  Bell,
   Briefcase,
   CalendarDays,
   Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  CircleAlert,
   CircleDollarSign,
   CircleHelp,
   ClipboardList,
+  Clock3,
   CreditCard,
   FileText,
   GripVertical,
@@ -42,6 +45,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -72,6 +76,14 @@ import {
   timeline,
   workflowRules,
 } from "@/lib/crm-data";
+import { buildLoanNotifications, type AppNotification } from "@/lib/notifications";
+import {
+  getAllPipelineLoans,
+  getPipelineLoans,
+  getPipelineLoansSnapshot,
+  setPipelineLoans,
+  subscribePipelineLoans,
+} from "@/lib/pipeline-loans";
 import {
   PRODUCT_PIPELINE_CONFIGS,
   type ProductPipelineConfig,
@@ -689,6 +701,9 @@ export default function CRMWorkspace() {
           onAccentChange={setAccentKey}
           onLogout={handleLogout}
           onRequestCreate={requestCreate}
+          onOpenNotification={(notification) => {
+            openRecord(notification.module, notification.recordId);
+          }}
         />
         <div className="content">
           {workspaceView === "admin" ? (
@@ -1269,6 +1284,7 @@ function Topbar({
   onAccentChange,
   onLogout,
   onRequestCreate,
+  onOpenNotification,
 }: {
   user: PublicUser;
   appearanceMode: AppearanceMode;
@@ -1279,12 +1295,29 @@ function Topbar({
   onAccentChange: (accent: AccentKey) => void;
   onLogout: () => void;
   onRequestCreate: (module: ModuleKey) => void;
+  onOpenNotification: (notification: AppNotification) => void;
 }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [createQuery, setCreateQuery] = useState("");
+  const [dismissedIds, setDismissedIds] = useState<string[]>([]);
   const profileRef = useRef<HTMLDivElement | null>(null);
   const createRef = useRef<HTMLDivElement | null>(null);
+  const notificationsRef = useRef<HTMLDivElement | null>(null);
+  const pipelineSnapshot = useSyncExternalStore(
+    subscribePipelineLoans,
+    getPipelineLoansSnapshot,
+    getPipelineLoansSnapshot,
+  );
+
+  const notifications = useMemo(
+    () =>
+      buildLoanNotifications(getAllPipelineLoans(pipelineSnapshot)).filter(
+        (item) => !dismissedIds.includes(item.id),
+      ),
+    [pipelineSnapshot, dismissedIds],
+  );
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
@@ -1293,6 +1326,9 @@ function Topbar({
       }
       if (!createRef.current?.contains(event.target as Node)) {
         setCreateOpen(false);
+      }
+      if (!notificationsRef.current?.contains(event.target as Node)) {
+        setNotificationsOpen(false);
       }
     }
     document.addEventListener("mousedown", handlePointerDown);
@@ -1318,6 +1354,7 @@ function Topbar({
                 return next;
               });
               setProfileOpen(false);
+              setNotificationsOpen(false);
             }}
           >
             <Plus size={15} />
@@ -1359,6 +1396,82 @@ function Topbar({
             </div>
           )}
         </div>
+        <div className="notifications-anchor" ref={notificationsRef}>
+          <button
+            className={`notifications-button ${notificationsOpen ? "active" : ""}`}
+            aria-label="Notifications"
+            aria-expanded={notificationsOpen}
+            onClick={() => {
+              setNotificationsOpen((value) => !value);
+              setCreateOpen(false);
+              setProfileOpen(false);
+            }}
+          >
+            <Bell size={15} />
+            {notifications.length > 0 ? (
+              <span className="notifications-badge">
+                {notifications.length > 9 ? "9+" : notifications.length}
+              </span>
+            ) : null}
+          </button>
+          {notificationsOpen && (
+            <div className="notifications-panel">
+              <div className="notifications-panel-header">
+                <div>
+                  <div className="notifications-panel-title">Notifications</div>
+                  <p className="notifications-panel-subtitle">
+                    Stale loans and overdue reviews
+                  </p>
+                </div>
+                {notifications.length > 0 ? (
+                  <button
+                    type="button"
+                    className="notifications-clear"
+                    onClick={() =>
+                      setDismissedIds((prev) => [
+                        ...new Set([...prev, ...notifications.map((item) => item.id)]),
+                      ])
+                    }
+                  >
+                    Clear all
+                  </button>
+                ) : null}
+              </div>
+              <div className="notifications-list">
+                {notifications.length === 0 ? (
+                  <p className="notifications-empty">You are all caught up.</p>
+                ) : (
+                  notifications.map((notification) => (
+                    <button
+                      key={notification.id}
+                      type="button"
+                      className={`notifications-item severity-${notification.severity}`}
+                      onClick={() => {
+                        onOpenNotification(notification);
+                        setDismissedIds((prev) =>
+                          prev.includes(notification.id) ? prev : [...prev, notification.id],
+                        );
+                        setNotificationsOpen(false);
+                      }}
+                    >
+                      <span className="notifications-item-icon" aria-hidden>
+                        {notification.type === "stale_loan" ? (
+                          <Clock3 size={15} />
+                        ) : (
+                          <CircleAlert size={15} />
+                        )}
+                      </span>
+                      <span className="notifications-item-copy">
+                        <strong>{notification.title}</strong>
+                        <span>{notification.body}</span>
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
         <div className="profile-anchor" ref={profileRef}>
           <button
             className={`avatar-button ${profileOpen ? "active" : ""}`}
@@ -1366,6 +1479,7 @@ function Topbar({
             onClick={() => {
               setProfileOpen((value) => !value);
               setCreateOpen(false);
+              setNotificationsOpen(false);
             }}
           >
             <span className="avatar-initials">{getInitials(user.displayName)}</span>
@@ -4577,7 +4691,7 @@ function buildDealColumns(config: ProductPipelineConfig): ColumnDef[] {
       header: "Product Type",
       type: "enum",
       enumOptions: [...LOAN_PRODUCT_OPTIONS],
-      colorGroup: "soft",
+      colorable: false,
     },
     { key: "amount", header: "Amount", type: "text" },
     {
@@ -4756,6 +4870,7 @@ function createEmptyLoan(config: ProductPipelineConfig): Deal {
     stage: firstStage,
     probability: config.stageProbability[firstStage] ?? 10,
     remarks: "",
+    updatedAt: new Date().toISOString(),
   };
 }
 
@@ -4839,6 +4954,7 @@ function LoanFormModal({
       guarantor: draft.guarantor.trim(),
       internalRating: draft.internalRating.trim(),
       remarks: draft.remarks.trim(),
+      updatedAt: new Date().toISOString(),
     });
     onClose();
   }
@@ -5188,10 +5304,16 @@ function DealsWorkspace({
   const kanbanFilters = useMemo(() => buildKanbanDealFilters(config), [config]);
   const { activeTab } = useContext(ModuleViewTabContext);
   const actionsHost = useContext(ModuleViewActionsHostContext);
-  const [dealRows, setDealRows] = useState(() => [...productPipelineData[moduleKey]]);
+  const [dealRows, setDealRows] = useState(() => [...getPipelineLoans(moduleKey)]);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Deal | null>(null);
   const [returnToHome, setReturnToHome] = useState(false);
+
+  function commitDealRows(updater: Deal[] | ((prev: Deal[]) => Deal[])) {
+    const next = typeof updater === "function" ? updater(dealRows) : updater;
+    setDealRows(next);
+    setPipelineLoans(moduleKey, next);
+  }
 
   useEffect(() => {
     if (createIntentId == null) return;
@@ -5235,7 +5357,7 @@ function DealsWorkspace({
             setEditing({ ...deal });
             setReturnToHome(false);
           }}
-          onDelete={() => setDealRows((prev) => prev.filter((item) => item.id !== deal.id))}
+          onDelete={() => commitDealRows((prev) => prev.filter((item) => item.id !== deal.id))}
         />
       );
     }
@@ -5257,7 +5379,7 @@ function DealsWorkspace({
         config={config}
         onClose={dismissForm}
         onSave={(next) => {
-          setDealRows((prev) => {
+          commitDealRows((prev) => {
             const index = prev.findIndex((item) => item.id === next.id);
             if (index < 0) return [next, ...prev];
             const copy = [...prev];

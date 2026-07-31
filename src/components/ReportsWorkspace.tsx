@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { startTransition, useMemo, useState, type ReactNode } from "react";
 import {
   Area,
   AreaChart,
@@ -36,17 +36,23 @@ import {
 } from "@/lib/crm-data";
 
 const CHART_COLORS = [
-  "#a31d31",
-  "#3B7DD8",
-  "#2FB5A8",
-  "#F0A202",
-  "#8B5CF6",
-  "#E85D4C",
-  "#14B8A6",
-  "#6366F1",
-  "#EC4899",
-  "#84CC16",
+  "#C47A86",
+  "#7BA3D4",
+  "#6BB8B0",
+  "#D4A84B",
+  "#A894D4",
+  "#D49084",
+  "#6AB8A8",
+  "#8B90D4",
+  "#D489B0",
+  "#A3C46E",
 ];
+
+/** Short ease-out motion: snappy tab refresh without janky bounce */
+const CHART_MOTION = {
+  animationDuration: 280,
+  animationEasing: "ease-out" as const,
+};
 
 const STAGE_ORDER = ["Identification", "Evaluation", "Approval", "Execution", "Completion"] as const;
 
@@ -206,7 +212,7 @@ function OverviewPanel() {
             <XAxis dataKey="name" tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} />
             <YAxis tickFormatter={formatCompact} tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip money />} />
-            <Bar dataKey="amount" name="Amount" radius={[6, 6, 0, 0]} maxBarSize={48}>
+            <Bar {...CHART_MOTION} dataKey="amount" name="Amount" radius={[6, 6, 0, 0]} maxBarSize={48}>
               {stageData.map((_, i) => (
                 <Cell key={STAGE_ORDER[i]} fill={CHART_COLORS[i % CHART_COLORS.length]} />
               ))}
@@ -218,7 +224,7 @@ function OverviewPanel() {
       <ReportCard title="Product mix" subtitle="Pipeline amount by product">
         <ResponsiveContainer width="100%" height={280}>
           <PieChart>
-            <Pie data={productData} dataKey="value" nameKey="name" innerRadius={58} outerRadius={92} paddingAngle={3}>
+            <Pie {...CHART_MOTION} data={productData} dataKey="value" nameKey="name" innerRadius={58} outerRadius={92} paddingAngle={3}>
               {productData.map((_, i) => (
                 <Cell key={productData[i].name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
               ))}
@@ -240,7 +246,7 @@ function OverviewPanel() {
             startAngle={90}
             endAngle={-270}
           >
-            <RadialBar background dataKey="value" cornerRadius={6} />
+            <RadialBar {...CHART_MOTION} background dataKey="value" cornerRadius={6} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
             <Tooltip content={<ChartTooltip />} />
           </RadialBarChart>
@@ -254,7 +260,7 @@ function OverviewPanel() {
             <XAxis type="number" allowDecimals={false} tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} />
             <YAxis type="category" dataKey="name" width={78} tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip />} />
-            <Bar dataKey="value" name="Leads" radius={[0, 6, 6, 0]} maxBarSize={22}>
+            <Bar {...CHART_MOTION} dataKey="value" name="Leads" radius={[0, 6, 6, 0]} maxBarSize={22}>
               {leadData.map((_, i) => (
                 <Cell key={leadData[i].name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
               ))}
@@ -266,7 +272,7 @@ function OverviewPanel() {
       <ReportCard title="Client franchise" subtitle="ETB / NTB / NNTB mix">
         <ResponsiveContainer width="100%" height={280}>
           <PieChart>
-            <Pie data={clientStatus} dataKey="value" nameKey="name" outerRadius={92} label>
+            <Pie {...CHART_MOTION} data={clientStatus} dataKey="value" nameKey="name" outerRadius={92} label>
               {clientStatus.map((_, i) => (
                 <Cell key={clientStatus[i].name} fill={CHART_COLORS[(i + 2) % CHART_COLORS.length]} />
               ))}
@@ -285,8 +291,8 @@ function OverviewPanel() {
             <YAxis allowDecimals={false} tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip />} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar dataKey="open" name="Open / Outbound" stackId="a" fill="#a31d31" radius={[0, 0, 0, 0]} maxBarSize={42} />
-            <Bar dataKey="done" name="Done / Inbound" stackId="a" fill="#2FB5A8" radius={[6, 6, 0, 0]} maxBarSize={42} />
+            <Bar {...CHART_MOTION} dataKey="open" name="Open / Outbound" stackId="a" fill="#C47A86" radius={[0, 0, 0, 0]} maxBarSize={42} />
+            <Bar {...CHART_MOTION} dataKey="done" name="Done / Inbound" stackId="a" fill="#6BB8B0" radius={[6, 6, 0, 0]} maxBarSize={42} />
           </BarChart>
         </ResponsiveContainer>
       </ReportCard>
@@ -331,7 +337,7 @@ function LoansPanel() {
             <XAxis type="number" tickFormatter={formatCompact} tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} />
             <YAxis type="category" dataKey="name" width={120} tick={{ fill: "var(--muted)", fontSize: 11 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip money />} />
-            <Bar dataKey="value" name="Amount" radius={[0, 6, 6, 0]} maxBarSize={24}>
+            <Bar {...CHART_MOTION} dataKey="value" name="Amount" radius={[0, 6, 6, 0]} maxBarSize={24}>
               {byBu.map((_, i) => (
                 <Cell key={byBu[i].name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
               ))}
@@ -343,7 +349,7 @@ function LoansPanel() {
       <ReportCard title="Outstanding by facility status" subtitle="Drawn balances">
         <ResponsiveContainer width="100%" height={300}>
           <PieChart>
-            <Pie data={byStatus} dataKey="value" nameKey="name" innerRadius={50} outerRadius={95} paddingAngle={2}>
+            <Pie {...CHART_MOTION} data={byStatus} dataKey="value" nameKey="name" innerRadius={50} outerRadius={95} paddingAngle={2}>
               {byStatus.map((_, i) => (
                 <Cell key={byStatus[i].name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
               ))}
@@ -362,8 +368,8 @@ function LoansPanel() {
             <YAxis yAxisId="left" tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} unit="%" />
             <Tooltip content={<ChartTooltip />} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar yAxisId="left" dataKey="utilization" name="Utilization %" fill="#a31d31" radius={[4, 4, 0, 0]} maxBarSize={36} />
-            <Line yAxisId="left" type="monotone" dataKey="ltv" name="LTV %" stroke="#3B7DD8" strokeWidth={2} dot={{ r: 4 }} />
+            <Bar {...CHART_MOTION} yAxisId="left" dataKey="utilization" name="Utilization %" fill="#C47A86" radius={[4, 4, 0, 0]} maxBarSize={36} />
+            <Line {...CHART_MOTION} yAxisId="left" type="monotone" dataKey="ltv" name="LTV %" stroke="#7BA3D4" strokeWidth={2} dot={{ r: 4 }} />
           </ComposedChart>
         </ResponsiveContainer>
       </ReportCard>
@@ -371,7 +377,7 @@ function LoansPanel() {
       <ReportCard title="Currency mix" subtitle="Pipeline by booking currency">
         <ResponsiveContainer width="100%" height={300}>
           <PieChart>
-            <Pie data={currencyMix} dataKey="value" nameKey="name" outerRadius={95}>
+            <Pie {...CHART_MOTION} data={currencyMix} dataKey="value" nameKey="name" outerRadius={95}>
               {currencyMix.map((_, i) => (
                 <Cell key={currencyMix[i].name} fill={CHART_COLORS[(i + 1) % CHART_COLORS.length]} />
               ))}
@@ -391,8 +397,8 @@ function LoansPanel() {
             <YAxis yAxisId="right" orientation="right" tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} unit="%" />
             <Tooltip content={<ChartTooltip />} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Area yAxisId="left" type="monotone" dataKey="tenor" name="Tenor (m)" fill="#f8e8eb" stroke="#a31d31" strokeWidth={2} />
-            <Line yAxisId="right" type="monotone" dataKey="rate" name="Interest %" stroke="#2FB5A8" strokeWidth={2} dot={{ r: 4 }} />
+            <Area {...CHART_MOTION} yAxisId="left" type="monotone" dataKey="tenor" name="Tenor (m)" fill="#F3E6E9" stroke="#C47A86" strokeWidth={2} />
+            <Line {...CHART_MOTION} yAxisId="right" type="monotone" dataKey="rate" name="Interest %" stroke="#6BB8B0" strokeWidth={2} dot={{ r: 4 }} />
           </ComposedChart>
         </ResponsiveContainer>
       </ReportCard>
@@ -430,7 +436,7 @@ function ClientsPanel() {
             <XAxis dataKey="name" tick={{ fill: "var(--muted)", fontSize: 11 }} axisLine={false} tickLine={false} />
             <YAxis allowDecimals={false} tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip />} />
-            <Bar dataKey="value" name="Clients" radius={[6, 6, 0, 0]} maxBarSize={40}>
+            <Bar {...CHART_MOTION} dataKey="value" name="Clients" radius={[6, 6, 0, 0]} maxBarSize={40}>
               {byRegion.map((_, i) => (
                 <Cell key={byRegion[i].name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
               ))}
@@ -442,7 +448,7 @@ function ClientsPanel() {
       <ReportCard title="KYC status" subtitle="Onboarding health">
         <ResponsiveContainer width="100%" height={280}>
           <PieChart>
-            <Pie data={byKyc} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={3}>
+            <Pie {...CHART_MOTION} data={byKyc} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={3}>
               {byKyc.map((_, i) => (
                 <Cell key={byKyc[i].name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
               ))}
@@ -460,7 +466,7 @@ function ClientsPanel() {
             <XAxis type="number" allowDecimals={false} tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} />
             <YAxis type="category" dataKey="name" width={150} tick={{ fill: "var(--muted)", fontSize: 11 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip />} />
-            <Bar dataKey="value" name="Clients" fill="#3B7DD8" radius={[0, 6, 6, 0]} maxBarSize={18} />
+            <Bar {...CHART_MOTION} dataKey="value" name="Clients" fill="#7BA3D4" radius={[0, 6, 6, 0]} maxBarSize={18} />
           </BarChart>
         </ResponsiveContainer>
       </ReportCard>
@@ -471,9 +477,9 @@ function ClientsPanel() {
             <PolarGrid stroke="var(--line)" />
             <PolarAngleAxis dataKey="segment" tick={{ fill: "var(--muted)", fontSize: 11 }} />
             <PolarRadiusAxis tick={{ fill: "var(--muted)", fontSize: 10 }} />
-            <Radar name="Clients" dataKey="clients" stroke="#a31d31" fill="#a31d31" fillOpacity={0.25} />
-            <Radar name="Loans" dataKey="loans" stroke="#2FB5A8" fill="#2FB5A8" fillOpacity={0.2} />
-            <Radar name="High risk" dataKey="highRisk" stroke="#F0A202" fill="#F0A202" fillOpacity={0.15} />
+            <Radar {...CHART_MOTION} name="Clients" dataKey="clients" stroke="#C47A86" fill="#C47A86" fillOpacity={0.25} />
+            <Radar {...CHART_MOTION} name="Loans" dataKey="loans" stroke="#6BB8B0" fill="#6BB8B0" fillOpacity={0.2} />
+            <Radar {...CHART_MOTION} name="High risk" dataKey="highRisk" stroke="#D4A84B" fill="#D4A84B" fillOpacity={0.15} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
             <Tooltip content={<ChartTooltip />} />
           </RadarChart>
@@ -483,11 +489,11 @@ function ClientsPanel() {
       <ReportCard title="Client risk rating" subtitle="Portfolio risk view">
         <ResponsiveContainer width="100%" height={280}>
           <PieChart>
-            <Pie data={byRisk} dataKey="value" nameKey="name" outerRadius={90}>
+            <Pie {...CHART_MOTION} data={byRisk} dataKey="value" nameKey="name" outerRadius={90}>
               {byRisk.map((d) => (
                 <Cell
                   key={d.name}
-                  fill={d.name === "High" ? "#E85D4C" : d.name === "Medium" ? "#F0A202" : "#2FB5A8"}
+                  fill={d.name === "High" ? "#D49084" : d.name === "Medium" ? "#D4A84B" : "#6BB8B0"}
                 />
               ))}
             </Pie>
@@ -504,11 +510,11 @@ function ClientsPanel() {
             <XAxis dataKey="name" tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} />
             <YAxis allowDecimals={false} tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip />} />
-            <Bar dataKey="value" name="Clients" radius={[6, 6, 0, 0]} maxBarSize={48}>
+            <Bar {...CHART_MOTION} dataKey="value" name="Clients" radius={[6, 6, 0, 0]} maxBarSize={48}>
               {byRating.map((d) => (
                 <Cell
                   key={d.name}
-                  fill={d.name === "Hot" ? "#E85D4C" : d.name === "Warm" ? "#F0A202" : "#3B7DD8"}
+                  fill={d.name === "Hot" ? "#D49084" : d.name === "Warm" ? "#D4A84B" : "#7BA3D4"}
                 />
               ))}
             </Bar>
@@ -519,7 +525,7 @@ function ClientsPanel() {
       <ReportCard title="Segment mix" subtitle="Banking franchise split">
         <ResponsiveContainer width="100%" height={280}>
           <PieChart>
-            <Pie data={bySegment} dataKey="value" nameKey="name" innerRadius={48} outerRadius={90} paddingAngle={2}>
+            <Pie {...CHART_MOTION} data={bySegment} dataKey="value" nameKey="name" innerRadius={48} outerRadius={90} paddingAngle={2}>
               {bySegment.map((_, i) => (
                 <Cell key={bySegment[i].name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
               ))}
@@ -592,12 +598,12 @@ function PipelinePanel() {
             <YAxis yAxisId="right" orientation="right" tickFormatter={formatCompact} tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip />} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar yAxisId="left" dataKey="count" name="Deals" radius={[6, 6, 0, 0]} maxBarSize={40}>
+            <Bar {...CHART_MOTION} yAxisId="left" dataKey="count" name="Deals" radius={[6, 6, 0, 0]} maxBarSize={40}>
               {stageFunnel.map((d) => (
                 <Cell key={d.name} fill={d.fill} />
               ))}
             </Bar>
-            <Line yAxisId="right" type="monotone" dataKey="amount" name="Amount" stroke="#1a1a19" strokeWidth={2} dot={{ r: 4 }} />
+            <Line {...CHART_MOTION} yAxisId="right" type="monotone" dataKey="amount" name="Amount" stroke="#6B6B68" strokeWidth={2} dot={{ r: 4 }} />
           </ComposedChart>
         </ResponsiveContainer>
       </ReportCard>
@@ -607,15 +613,15 @@ function PipelinePanel() {
           <AreaChart data={stageFunnel} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="probFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#a31d31" stopOpacity={0.35} />
-                <stop offset="100%" stopColor="#a31d31" stopOpacity={0.02} />
+                <stop offset="0%" stopColor="#C47A86" stopOpacity={0.35} />
+                <stop offset="100%" stopColor="#C47A86" stopOpacity={0.02} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" />
             <XAxis dataKey="name" tick={{ fill: "var(--muted)", fontSize: 11 }} axisLine={false} tickLine={false} />
             <YAxis domain={[0, 100]} tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} unit="%" />
             <Tooltip content={<ChartTooltip />} />
-            <Area type="monotone" dataKey="probability" name="Avg %" stroke="#a31d31" fill="url(#probFill)" strokeWidth={2} />
+            <Area {...CHART_MOTION} type="monotone" dataKey="probability" name="Avg %" stroke="#C47A86" fill="url(#probFill)" strokeWidth={2} />
           </AreaChart>
         </ResponsiveContainer>
       </ReportCard>
@@ -628,8 +634,8 @@ function PipelinePanel() {
             <YAxis tickFormatter={formatCompact} tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip money />} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar dataKey="amount" name="Pipeline" fill="#a31d31" radius={[6, 6, 0, 0]} maxBarSize={40} />
-            <Bar dataKey="weighted" name="Weighted" fill="#2FB5A8" radius={[6, 6, 0, 0]} maxBarSize={40} />
+            <Bar {...CHART_MOTION} dataKey="amount" name="Pipeline" fill="#C47A86" radius={[6, 6, 0, 0]} maxBarSize={40} />
+            <Bar {...CHART_MOTION} dataKey="weighted" name="Weighted" fill="#6BB8B0" radius={[6, 6, 0, 0]} maxBarSize={40} />
           </ComposedChart>
         </ResponsiveContainer>
       </ReportCard>
@@ -641,7 +647,7 @@ function PipelinePanel() {
             <XAxis dataKey="name" tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} />
             <YAxis tickFormatter={formatCompact} tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip money />} />
-            <Bar dataKey="amount" name="Amount" radius={[6, 6, 0, 0]} maxBarSize={48}>
+            <Bar {...CHART_MOTION} dataKey="amount" name="Amount" radius={[6, 6, 0, 0]} maxBarSize={48}>
               {probabilityBands.map((_, i) => (
                 <Cell key={probabilityBands[i].name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
               ))}
@@ -653,7 +659,7 @@ function PipelinePanel() {
       <ReportCard title="Lead ownership" subtitle="Leads per RM">
         <ResponsiveContainer width="100%" height={300}>
           <PieChart>
-            <Pie data={leadOwner} dataKey="value" nameKey="name" innerRadius={50} outerRadius={95} paddingAngle={2}>
+            <Pie {...CHART_MOTION} data={leadOwner} dataKey="value" nameKey="name" innerRadius={50} outerRadius={95} paddingAngle={2}>
               {leadOwner.map((_, i) => (
                 <Cell key={leadOwner[i].name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
               ))}
@@ -709,8 +715,8 @@ function CampaignsPanel() {
             <YAxis tickFormatter={formatCompact} tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip money />} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar dataKey="budget" name="Budgeted" fill="#3B7DD8" radius={[4, 4, 0, 0]} maxBarSize={28} />
-            <Bar dataKey="actual" name="Actual" fill="#a31d31" radius={[4, 4, 0, 0]} maxBarSize={28} />
+            <Bar {...CHART_MOTION} dataKey="budget" name="Budgeted" fill="#7BA3D4" radius={[4, 4, 0, 0]} maxBarSize={28} />
+            <Bar {...CHART_MOTION} dataKey="actual" name="Actual" fill="#C47A86" radius={[4, 4, 0, 0]} maxBarSize={28} />
           </BarChart>
         </ResponsiveContainer>
       </ReportCard>
@@ -720,15 +726,15 @@ function CampaignsPanel() {
           <AreaChart data={performance} margin={{ top: 8, right: 8, left: 0, bottom: 40 }}>
             <defs>
               <linearGradient id="revFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#2FB5A8" stopOpacity={0.4} />
-                <stop offset="100%" stopColor="#2FB5A8" stopOpacity={0.02} />
+                <stop offset="0%" stopColor="#6BB8B0" stopOpacity={0.4} />
+                <stop offset="100%" stopColor="#6BB8B0" stopOpacity={0.02} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" />
             <XAxis dataKey="name" interval={0} angle={-18} textAnchor="end" height={50} tick={{ fill: "var(--muted)", fontSize: 10 }} axisLine={false} tickLine={false} />
             <YAxis tickFormatter={formatCompact} tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip money />} />
-            <Area type="monotone" dataKey="revenue" name="Expected revenue" stroke="#2FB5A8" fill="url(#revFill)" strokeWidth={2} />
+            <Area {...CHART_MOTION} type="monotone" dataKey="revenue" name="Expected revenue" stroke="#6BB8B0" fill="url(#revFill)" strokeWidth={2} />
           </AreaChart>
         </ResponsiveContainer>
       </ReportCard>
@@ -741,8 +747,8 @@ function CampaignsPanel() {
             <YAxis tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip />} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Bar dataKey="leads" name="Leads" fill="#8B5CF6" radius={[4, 4, 0, 0]} maxBarSize={32} />
-            <Line type="monotone" dataKey="converted" name="Converted" stroke="#F0A202" strokeWidth={2} dot={{ r: 4 }} />
+            <Bar {...CHART_MOTION} dataKey="leads" name="Leads" fill="#A894D4" radius={[4, 4, 0, 0]} maxBarSize={32} />
+            <Line {...CHART_MOTION} type="monotone" dataKey="converted" name="Converted" stroke="#D4A84B" strokeWidth={2} dot={{ r: 4 }} />
           </ComposedChart>
         </ResponsiveContainer>
       </ReportCard>
@@ -750,7 +756,7 @@ function CampaignsPanel() {
       <ReportCard title="Channel mix" subtitle="Campaigns by channel">
         <ResponsiveContainer width="100%" height={280}>
           <PieChart>
-            <Pie data={byChannel} dataKey="value" nameKey="name" innerRadius={48} outerRadius={90} paddingAngle={2}>
+            <Pie {...CHART_MOTION} data={byChannel} dataKey="value" nameKey="name" innerRadius={48} outerRadius={90} paddingAngle={2}>
               {byChannel.map((_, i) => (
                 <Cell key={byChannel[i].name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
               ))}
@@ -764,7 +770,7 @@ function CampaignsPanel() {
       <ReportCard title="Campaign status" subtitle="Lifecycle distribution">
         <ResponsiveContainer width="100%" height={280}>
           <PieChart>
-            <Pie data={byStatus} dataKey="value" nameKey="name" outerRadius={90}>
+            <Pie {...CHART_MOTION} data={byStatus} dataKey="value" nameKey="name" outerRadius={90}>
               {byStatus.map((_, i) => (
                 <Cell key={byStatus[i].name} fill={CHART_COLORS[(i + 3) % CHART_COLORS.length]} />
               ))}
@@ -782,7 +788,7 @@ function CampaignsPanel() {
             <XAxis dataKey="name" tick={{ fill: "var(--muted)", fontSize: 11 }} axisLine={false} tickLine={false} />
             <YAxis unit="%" tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip />} />
-            <Bar dataKey="rate" name="Conversion %" fill="#a31d31" radius={[6, 6, 0, 0]} maxBarSize={40} />
+            <Bar {...CHART_MOTION} dataKey="rate" name="Conversion %" fill="#C47A86" radius={[6, 6, 0, 0]} maxBarSize={40} />
           </BarChart>
         </ResponsiveContainer>
       </ReportCard>
@@ -794,7 +800,7 @@ function CampaignsPanel() {
             <XAxis type="number" allowDecimals={false} tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} />
             <YAxis type="category" dataKey="name" width={130} tick={{ fill: "var(--muted)", fontSize: 11 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip />} />
-            <Bar dataKey="value" name="Campaigns" fill="#F0A202" radius={[0, 6, 6, 0]} maxBarSize={18} />
+            <Bar {...CHART_MOTION} dataKey="value" name="Campaigns" fill="#D4A84B" radius={[0, 6, 6, 0]} maxBarSize={18} />
           </BarChart>
         </ResponsiveContainer>
       </ReportCard>
@@ -833,12 +839,12 @@ function ActivityPanel() {
           <ComposedChart data={weeklyProxy} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="taskFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#a31d31" stopOpacity={0.35} />
-                <stop offset="100%" stopColor="#a31d31" stopOpacity={0.02} />
+                <stop offset="0%" stopColor="#C47A86" stopOpacity={0.35} />
+                <stop offset="100%" stopColor="#C47A86" stopOpacity={0.02} />
               </linearGradient>
               <linearGradient id="meetFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#3B7DD8" stopOpacity={0.3} />
-                <stop offset="100%" stopColor="#3B7DD8" stopOpacity={0.02} />
+                <stop offset="0%" stopColor="#7BA3D4" stopOpacity={0.3} />
+                <stop offset="100%" stopColor="#7BA3D4" stopOpacity={0.02} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" />
@@ -846,9 +852,9 @@ function ActivityPanel() {
             <YAxis allowDecimals={false} tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip />} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Area type="monotone" dataKey="tasks" name="Tasks" stroke="#a31d31" fill="url(#taskFill)" strokeWidth={2} />
-            <Area type="monotone" dataKey="meetings" name="Meetings" stroke="#3B7DD8" fill="url(#meetFill)" strokeWidth={2} />
-            <Line type="monotone" dataKey="calls" name="Calls" stroke="#F0A202" strokeWidth={2} dot={{ r: 4 }} />
+            <Area {...CHART_MOTION} type="monotone" dataKey="tasks" name="Tasks" stroke="#C47A86" fill="url(#taskFill)" strokeWidth={2} />
+            <Area {...CHART_MOTION} type="monotone" dataKey="meetings" name="Meetings" stroke="#7BA3D4" fill="url(#meetFill)" strokeWidth={2} />
+            <Line {...CHART_MOTION} type="monotone" dataKey="calls" name="Calls" stroke="#D4A84B" strokeWidth={2} dot={{ r: 4 }} />
           </ComposedChart>
         </ResponsiveContainer>
       </ReportCard>
@@ -856,7 +862,7 @@ function ActivityPanel() {
       <ReportCard title="Task status" subtitle="Execution health">
         <ResponsiveContainer width="100%" height={280}>
           <PieChart>
-            <Pie data={taskStatus} dataKey="value" nameKey="name" innerRadius={50} outerRadius={90} paddingAngle={3}>
+            <Pie {...CHART_MOTION} data={taskStatus} dataKey="value" nameKey="name" innerRadius={50} outerRadius={90} paddingAngle={3}>
               {taskStatus.map((_, i) => (
                 <Cell key={taskStatus[i].name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
               ))}
@@ -874,11 +880,11 @@ function ActivityPanel() {
             <XAxis dataKey="name" tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} />
             <YAxis allowDecimals={false} tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip />} />
-            <Bar dataKey="value" name="Tasks" radius={[6, 6, 0, 0]} maxBarSize={48}>
+            <Bar {...CHART_MOTION} dataKey="value" name="Tasks" radius={[6, 6, 0, 0]} maxBarSize={48}>
               {taskPriority.map((d) => (
                 <Cell
                   key={d.name}
-                  fill={d.name === "High" ? "#E85D4C" : d.name === "Normal" ? "#3B7DD8" : "#2FB5A8"}
+                  fill={d.name === "High" ? "#D49084" : d.name === "Normal" ? "#7BA3D4" : "#6BB8B0"}
                 />
               ))}
             </Bar>
@@ -889,9 +895,9 @@ function ActivityPanel() {
       <ReportCard title="Call direction" subtitle="Inbound vs outbound">
         <ResponsiveContainer width="100%" height={280}>
           <PieChart>
-            <Pie data={callType} dataKey="value" nameKey="name" outerRadius={90}>
+            <Pie {...CHART_MOTION} data={callType} dataKey="value" nameKey="name" outerRadius={90}>
               {callType.map((d, i) => (
-                <Cell key={d.name} fill={i === 0 ? "#a31d31" : "#2FB5A8"} />
+                <Cell key={d.name} fill={i === 0 ? "#C47A86" : "#6BB8B0"} />
               ))}
             </Pie>
             <Tooltip content={<ChartTooltip />} />
@@ -907,7 +913,7 @@ function ActivityPanel() {
             <XAxis type="number" allowDecimals={false} tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} />
             <YAxis type="category" dataKey="name" width={70} tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip />} />
-            <Bar dataKey="value" name="Meetings" fill="#8B5CF6" radius={[0, 6, 6, 0]} maxBarSize={22} />
+            <Bar {...CHART_MOTION} dataKey="value" name="Meetings" fill="#A894D4" radius={[0, 6, 6, 0]} maxBarSize={22} />
           </BarChart>
         </ResponsiveContainer>
       </ReportCard>
@@ -919,7 +925,7 @@ function ActivityPanel() {
             <XAxis dataKey="name" interval={0} angle={-15} textAnchor="end" height={50} tick={{ fill: "var(--muted)", fontSize: 10 }} axisLine={false} tickLine={false} />
             <YAxis allowDecimals={false} tick={{ fill: "var(--muted)", fontSize: 12 }} axisLine={false} tickLine={false} />
             <Tooltip content={<ChartTooltip />} />
-            <Bar dataKey="value" name="Tasks" fill="#a31d31" radius={[6, 6, 0, 0]} maxBarSize={40} />
+            <Bar {...CHART_MOTION} dataKey="value" name="Tasks" fill="#C47A86" radius={[6, 6, 0, 0]} maxBarSize={40} />
           </BarChart>
         </ResponsiveContainer>
       </ReportCard>
@@ -958,7 +964,7 @@ export function ReportsWorkspace() {
             role="tab"
             aria-selected={tab === item.key}
             className={`reports-tab ${tab === item.key ? "active" : ""}`}
-            onClick={() => setTab(item.key)}
+            onClick={() => startTransition(() => setTab(item.key))}
           >
             {item.label}
           </button>
