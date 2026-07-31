@@ -1,10 +1,11 @@
 "use client";
 
 import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, ClipboardList, Mail, Phone, Plus, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { calls as seedCalls, deals, meetings as seedMeetings, tasks as seedTasks } from "@/lib/crm-data";
+import { calls as seedCalls, meetings as seedMeetings, tasks as seedTasks } from "@/lib/crm-data";
 import { getHoliday } from "@/lib/holidays";
+import { getPipelineLoansSnapshot, subscribePipelineLoans } from "@/lib/pipeline-loans";
 import { ActivityStatus, Call, Deal, Meeting, ModuleKey, Task } from "@/lib/types";
 
 type CalendarView = "day" | "week" | "month";
@@ -641,12 +642,18 @@ export function HomeLoansClosing({
     return new Date(now.getFullYear(), now.getMonth(), now.getDate());
   }, []);
 
+  const pipelineSnapshot = useSyncExternalStore(
+    subscribePipelineLoans,
+    getPipelineLoansSnapshot,
+    getPipelineLoansSnapshot,
+  );
+
   const monthLoans = useMemo(() => {
     const prefix = monthPrefix(today);
-    return [...deals]
+    return [...pipelineSnapshot.deals]
       .filter((deal) => deal.closingDate.startsWith(prefix))
       .sort((a, b) => a.closingDate.localeCompare(b.closingDate));
-  }, [today]);
+  }, [today, pipelineSnapshot]);
 
   const pipelineSummary = useMemo(() => {
     const totalAmount = monthLoans.reduce((sum, deal) => sum + deal.amount, 0);
