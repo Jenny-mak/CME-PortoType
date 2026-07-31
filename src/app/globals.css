@@ -5358,7 +5358,7 @@ html[data-mode="night"] .loan-form-finish-button {
 
 .client-form-page:has(.loan-form-stage-rail) > .client-form-header {
   border-bottom: 0;
-  padding-bottom: 8px;
+  padding-bottom: 4px;
 }
 
 .client-form-page > .loan-form-stage-rail {
@@ -5368,7 +5368,7 @@ html[data-mode="night"] .loan-form-finish-button {
 .loan-form-stage-rail {
   background: color-mix(in srgb, var(--panel-muted) 45%, var(--panel));
   border-bottom: 1px solid var(--line);
-  padding: 10px 14px 12px;
+  padding: 4px 12px 6px;
 }
 
 .loan-form-stage-trail {
@@ -5379,11 +5379,11 @@ html[data-mode="night"] .loan-form-finish-button {
 .loan-form-stage-track {
   background: color-mix(in srgb, var(--line) 88%, var(--text));
   border-radius: 999px;
-  height: 3px;
+  height: 2px;
   left: calc(100% / var(--stage-count, 5) / 2);
   position: absolute;
   right: calc(100% / var(--stage-count, 5) / 2);
-  top: 13px;
+  top: 8px;
   z-index: 0;
 }
 
@@ -5402,7 +5402,7 @@ html[data-mode="night"] .loan-form-finish-button {
 .loan-form-stage-steps {
   --stage-count: 5;
   display: grid;
-  gap: 4px;
+  gap: 2px;
   grid-template-columns: repeat(var(--stage-count), minmax(0, 1fr));
   position: relative;
   z-index: 1;
@@ -5412,14 +5412,14 @@ html[data-mode="night"] .loan-form-finish-button {
   align-items: center;
   background: transparent;
   border: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   color: var(--muted);
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 2px;
   min-width: 0;
-  padding: 2px 4px 4px;
+  padding: 1px 2px 2px;
   transition:
     color 0.15s ease,
     transform 0.15s ease,
@@ -5434,13 +5434,13 @@ html[data-mode="night"] .loan-form-finish-button {
 .loan-form-stage-node {
   align-items: center;
   background: var(--panel);
-  border: 2px solid color-mix(in srgb, var(--line) 80%, var(--muted));
+  border: 1.5px solid color-mix(in srgb, var(--line) 80%, var(--muted));
   border-radius: 999px;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--panel) 88%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--panel) 88%, transparent);
   color: #fff;
   display: inline-flex;
   flex-shrink: 0;
-  height: 24px;
+  height: 16px;
   justify-content: center;
   position: relative;
   transition:
@@ -5448,21 +5448,21 @@ html[data-mode="night"] .loan-form-finish-button {
     border-color 0.2s ease,
     box-shadow 0.2s ease,
     transform 0.2s ease;
-  width: 24px;
+  width: 16px;
 }
 
 .loan-form-stage-dot {
   background: color-mix(in srgb, var(--muted) 55%, transparent);
   border-radius: 999px;
-  height: 6px;
-  width: 6px;
+  height: 4px;
+  width: 4px;
 }
 
 .loan-form-stage-pulse {
   background: #fff;
   border-radius: 999px;
-  height: 8px;
-  width: 8px;
+  height: 5px;
+  width: 5px;
 }
 
 .loan-form-stage-step.is-done .loan-form-stage-node {
@@ -5474,9 +5474,9 @@ html[data-mode="night"] .loan-form-finish-button {
   background: var(--stage-color);
   border-color: var(--stage-color);
   box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--panel) 88%, transparent),
-    0 0 0 6px color-mix(in srgb, var(--stage-color) 22%, transparent);
-  transform: scale(1.08);
+    0 0 0 2px color-mix(in srgb, var(--panel) 88%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--stage-color) 22%, transparent);
+  transform: scale(1.06);
 }
 
 .loan-form-stage-step.is-current {
@@ -5488,19 +5488,22 @@ html[data-mode="night"] .loan-form-finish-button {
 }
 
 .loan-form-stage-copy {
+  align-items: baseline;
   display: flex;
-  flex-direction: column;
-  gap: 1px;
+  flex-wrap: nowrap;
+  gap: 3px;
+  justify-content: center;
   min-width: 0;
   text-align: center;
   width: 100%;
 }
 
 .loan-form-stage-name {
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 650;
   letter-spacing: -0.02em;
-  line-height: 1.2;
+  line-height: 1.15;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -5512,10 +5515,12 @@ html[data-mode="night"] .loan-form-finish-button {
 
 .loan-form-stage-pct {
   color: var(--muted);
+  flex-shrink: 0;
   font-size: 10px;
   font-variant-numeric: tabular-nums;
   font-weight: 500;
   letter-spacing: -0.01em;
+  line-height: 1.15;
 }
 
 .loan-form-stage-step.is-current .loan-form-stage-pct {
@@ -5533,7 +5538,7 @@ html[data-mode="night"] .loan-form-finish-button {
   }
 
   .loan-form-stage-rail {
-    padding: 8px 10px 10px;
+    padding: 4px 8px 5px;
   }
 }
 

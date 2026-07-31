@@ -79,7 +79,7 @@ export function LoanFormStageTrail({
               onClick={() => onSelect(stage)}
             >
               <span className="loan-form-stage-node">
-                {state === "done" ? <Check size={12} strokeWidth={2.6} aria-hidden /> : null}
+                {state === "done" ? <Check size={9} strokeWidth={2.8} aria-hidden /> : null}
                 {state === "current" ? <span className="loan-form-stage-pulse" aria-hidden /> : null}
                 {state === "upcoming" ? <span className="loan-form-stage-dot" aria-hidden /> : null}
               </span>
