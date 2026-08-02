@@ -13,7 +13,7 @@ html[data-mode="day"] {
   --brand-soft: #f8e8eb;
   --brand-mark: #cf4651;
   --nav: #a31d31;
-  --nav-text: rgb(235, 215, 217);
+  --nav-text: #ffffff;
   --nav-soft: #8a1829;
   --nav-active: rgb(255 255 255 / 16%);
   --nav-hover: rgb(255 255 255 / 10%);
@@ -50,7 +50,7 @@ html[data-mode="night"] {
   --text: #f2f0ea;
   --text-secondary: #c2bfb6;
   --muted: #9a978f;
-  --nav-text: rgb(235, 215, 217);
+  --nav-text: #ffffff;
   --nav-active: rgb(255 255 255 / 14%);
   --nav-hover: rgb(255 255 255 / 9%);
   --brand-soft: #3a3642;

@@ -5265,11 +5265,6 @@ function createEmptyMeeting(): Meeting {
   };
 }
 
-function exportMeetings(rows: Meeting[]) {
-  const stamp = new Date().toISOString().slice(0, 10);
-  exportRecordsCsv(`meetings-export-${stamp}.csv`, MEETING_IMPORT_FIELDS, rows);
-}
-
 function ImportMeetingsModal({
   existing,
   onClose,
@@ -5360,7 +5355,6 @@ function MeetingsWorkspace({
           setReturnToHome(false);
         }}
         onImport={() => setImportOpen(true)}
-        onExport={exportMeetings}
         renderRows={(visibleRows, orderedColumns) => (
           <tbody>
             {visibleRows.map((meeting) => (
@@ -5522,11 +5516,6 @@ function createEmptyCall(): Call {
   };
 }
 
-function exportCalls(rows: Call[]) {
-  const stamp = new Date().toISOString().slice(0, 10);
-  exportRecordsCsv(`calls-export-${stamp}.csv`, CALL_IMPORT_FIELDS, rows);
-}
-
 function ImportCallsModal({
   existing,
   onClose,
@@ -5583,7 +5572,6 @@ function CallsWorkspace({
         importLabel="Import Calls"
         onCreate={() => setCreating(true)}
         onImport={() => setImportOpen(true)}
-        onExport={exportCalls}
         renderRows={(visibleRows, orderedColumns) => (
           <tbody>
             {visibleRows.map((call) => (
@@ -8736,6 +8724,11 @@ function ContactsWorkspace({
     });
   }
 
+  function startCreate() {
+    setEditing({ contact: createEmptyContact(), mode: "create" });
+    setReturnToHome(false);
+  }
+
   function renderContactCell(row: Contact, column: ColumnDef) {
     if (column.key === "select") {
       return (
@@ -8760,6 +8753,33 @@ function ContactsWorkspace({
     return value == null || value === "" ? "" : String(value);
   }
 
+  const contactModals = (
+    <>
+      {importOpen ? (
+        <ImportContactsModal
+          existing={rows}
+          onClose={() => setImportOpen(false)}
+          onImport={(created, updated) => {
+            setRows((prev) => {
+              const updatedById = new Map(updated.map((contact) => [contact.id, contact]));
+              const merged = prev.map((contact) => updatedById.get(contact.id) ?? contact);
+              return [...created, ...merged];
+            });
+          }}
+        />
+      ) : null}
+      {editing ? (
+        <ContactFormModal
+          key={editing.mode === "create" ? "create-contact" : editing.contact.id}
+          contact={editing.contact}
+          mode={editing.mode}
+          onClose={dismissForm}
+          onSave={handleSave}
+        />
+      ) : null}
+    </>
+  );
+
   return (
     <>
       <RecordListShell
@@ -8770,10 +8790,7 @@ function ContactsWorkspace({
         getCellValue={getContactCellValue}
         createLabel="Create Contact"
         importLabel="Import Contacts"
-        onCreate={() => {
-          setEditing({ contact: createEmptyContact(), mode: "create" });
-          setReturnToHome(false);
-        }}
+        onCreate={startCreate}
         onImport={() => setImportOpen(true)}
         onExport={exportContacts}
         renderRows={(visibleRows, orderedColumns) => (
@@ -8807,28 +8824,7 @@ function ContactsWorkspace({
           </tbody>
         )}
       />
-      {importOpen ? (
-        <ImportContactsModal
-          existing={rows}
-          onClose={() => setImportOpen(false)}
-          onImport={(created, updated) => {
-            setRows((prev) => {
-              const updatedById = new Map(updated.map((contact) => [contact.id, contact]));
-              const merged = prev.map((contact) => updatedById.get(contact.id) ?? contact);
-              return [...created, ...merged];
-            });
-          }}
-        />
-      ) : null}
-      {editing ? (
-        <ContactFormModal
-          key={editing.mode === "create" ? "create-contact" : editing.contact.id}
-          contact={editing.contact}
-          mode={editing.mode}
-          onClose={dismissForm}
-          onSave={handleSave}
-        />
-      ) : null}
+      {contactModals}
     </>
   );
 }
