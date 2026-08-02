@@ -2171,6 +2171,64 @@ function getLeadCellValue(lead: Lead, key: string) {
   return "";
 }
 
+
+const LEAD_STATUS_OPTIONS: Lead["status"][] = ["New", "Contacted", "Qualified", "Converted"];
+
+type LeadImportFieldKey = Exclude<keyof Lead, "id" | "tag">;
+
+const LEAD_IMPORT_FIELDS: ImportFieldDef<LeadImportFieldKey>[] = [
+  { key: "name", label: "Lead Name", required: true, sample: "Alex Chen" },
+  { key: "company", label: "Company", sample: "Everbright Trading Ltd" },
+  { key: "email", label: "Email", required: true, sample: "alex.chen@example.com" },
+  { key: "phone", label: "Phone", sample: "+852 2500 1234" },
+  { key: "owner", label: "Owner", sample: "Jenny" },
+  { key: "status", label: "Status", options: LEAD_STATUS_OPTIONS, sample: "New" },
+];
+
+function createEmptyLead(): Lead {
+  return {
+    id: `lead-${Date.now()}`,
+    name: "",
+    company: "",
+    email: "",
+    phone: "",
+    owner: "Jenny",
+    status: "New",
+  };
+}
+
+function exportLeads(rows: Lead[]) {
+  const stamp = new Date().toISOString().slice(0, 10);
+  exportRecordsCsv(`leads-export-${stamp}.csv`, LEAD_IMPORT_FIELDS, rows);
+}
+
+function ImportLeadsModal({
+  existing,
+  onClose,
+  onImport,
+}: {
+  existing: Lead[];
+  onClose: () => void;
+  onImport: (created: Lead[], updated: Lead[]) => void;
+}) {
+  return (
+    <ImportRecordsModal
+      moduleLabel="Leads"
+      recordLabel="Lead"
+      fields={LEAD_IMPORT_FIELDS}
+      matchKey="email"
+      matchLabel="Email"
+      existing={existing}
+      getMatchValue={(lead) => lead.email}
+      createEmpty={createEmptyLead}
+      makeId={(index) => `lead-import-${Date.now()}-${index}`}
+      templateFilename="leads-import-template.csv"
+      onClose={onClose}
+      onImport={onImport}
+    />
+  );
+}
+
 function LeadsWorkspace({
   detailTab,
   setDetailTab,
@@ -2191,6 +2249,7 @@ function LeadsWorkspace({
   const [rows, setRows] = useState(() => [...leads]);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Lead | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [returnToHome, setReturnToHome] = useState(false);
 
   useEffect(() => {
@@ -2229,11 +2288,15 @@ function LeadsWorkspace({
         data={rows}
         columns={leadColumns}
         getCellValue={getLeadCellValue}
+        createLabel="Create Lead"
+        importLabel="Import Leads"
         onCreate={() => {
           setEditing(null);
           setCreating(true);
           setReturnToHome(false);
         }}
+        onImport={() => setImportOpen(true)}
+        onExport={exportLeads}
         renderRows={(visibleRows, orderedColumns) => (
           <tbody>
             {visibleRows.map((lead) => (
@@ -2299,6 +2362,19 @@ function LeadsWorkspace({
         )}
       />
       <LeadDetail detailTab={detailTab} setDetailTab={setDetailTab} />
+      {importOpen ? (
+        <ImportLeadsModal
+          existing={rows}
+          onClose={() => setImportOpen(false)}
+          onImport={(created, updated) => {
+            setRows((prev) => {
+              const updatedById = new Map(updated.map((lead) => [lead.id, lead]));
+              const merged = prev.map((lead) => updatedById.get(lead.id) ?? lead);
+              return [...created, ...merged];
+            });
+          }}
+        />
+      ) : null}
       {creating || editing ? (
         <QuickCreateModal
           key={editing?.id ?? "create-lead"}
@@ -4901,6 +4977,63 @@ function getTaskCellValue(task: Task, key: string) {
   return "";
 }
 
+
+const TASK_STATUS_OPTIONS: Task["status"][] = ["Not Started", "Completed", "Deferred"];
+const TASK_PRIORITY_OPTIONS: Task["priority"][] = ["High", "Normal", "Low"];
+
+type TaskImportFieldKey = Exclude<keyof Task, "id">;
+
+const TASK_IMPORT_FIELDS: ImportFieldDef<TaskImportFieldKey>[] = [
+  { key: "subject", label: "Subject", required: true, sample: "Follow up with client" },
+  { key: "dueDate", label: "Due Date", sample: "2026-08-15" },
+  { key: "status", label: "Status", options: TASK_STATUS_OPTIONS, sample: "Not Started" },
+  { key: "priority", label: "Priority", options: TASK_PRIORITY_OPTIONS, sample: "Normal" },
+  { key: "account", label: "Account", sample: "King (Sample)" },
+];
+
+function createEmptyTask(): Task {
+  return {
+    id: `task-${Date.now()}`,
+    subject: "",
+    dueDate: "",
+    status: "Not Started",
+    priority: "Normal",
+    account: "",
+  };
+}
+
+function exportTasks(rows: Task[]) {
+  const stamp = new Date().toISOString().slice(0, 10);
+  exportRecordsCsv(`tasks-export-${stamp}.csv`, TASK_IMPORT_FIELDS, rows);
+}
+
+function ImportTasksModal({
+  existing,
+  onClose,
+  onImport,
+}: {
+  existing: Task[];
+  onClose: () => void;
+  onImport: (created: Task[], updated: Task[]) => void;
+}) {
+  return (
+    <ImportRecordsModal
+      moduleLabel="Tasks"
+      recordLabel="Task"
+      fields={TASK_IMPORT_FIELDS}
+      matchKey="subject"
+      matchLabel="Subject"
+      existing={existing}
+      getMatchValue={(task) => task.subject}
+      createEmpty={createEmptyTask}
+      makeId={(index) => `task-import-${Date.now()}-${index}`}
+      templateFilename="tasks-import-template.csv"
+      onClose={onClose}
+      onImport={onImport}
+    />
+  );
+}
+
 function TasksWorkspace({
   createIntentId = null,
   onCreateHandled,
@@ -4917,6 +5050,7 @@ function TasksWorkspace({
   const [rows, setRows] = useState(() => [...tasks]);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [returnToHome, setReturnToHome] = useState(false);
 
   useEffect(() => {
@@ -4955,11 +5089,15 @@ function TasksWorkspace({
         data={rows}
         columns={taskColumns}
         getCellValue={getTaskCellValue}
+        createLabel="Create Task"
+        importLabel="Import Tasks"
         onCreate={() => {
           setEditing(null);
           setCreating(true);
           setReturnToHome(false);
         }}
+        onImport={() => setImportOpen(true)}
+        onExport={exportTasks}
         renderRows={(visibleRows, orderedColumns) => (
           <tbody>
             {visibleRows.map((task) => (
@@ -5007,6 +5145,19 @@ function TasksWorkspace({
           </tbody>
         )}
       />
+      {importOpen ? (
+        <ImportTasksModal
+          existing={rows}
+          onClose={() => setImportOpen(false)}
+          onImport={(created, updated) => {
+            setRows((prev) => {
+              const updatedById = new Map(updated.map((task) => [task.id, task]));
+              const merged = prev.map((task) => updatedById.get(task.id) ?? task);
+              return [...created, ...merged];
+            });
+          }}
+        />
+      ) : null}
       {creating || editing ? (
         <QuickCreateModal
           title={editing ? "Edit Task" : "Create Task"}
@@ -5092,6 +5243,60 @@ function getMeetingCellValue(meeting: Meeting, key: string) {
   return "";
 }
 
+
+type MeetingImportFieldKey = Exclude<keyof Meeting, "id">;
+
+const MEETING_IMPORT_FIELDS: ImportFieldDef<MeetingImportFieldKey>[] = [
+  { key: "title", label: "Title", required: true, sample: "Client Kickoff" },
+  { key: "from", label: "From", sample: "2026-08-10 09:00 AM" },
+  { key: "to", label: "To", sample: "2026-08-10 10:00 AM" },
+  { key: "relatedTo", label: "Related To", sample: "King (Sample)" },
+  { key: "owner", label: "Owner", sample: "Jenny" },
+];
+
+function createEmptyMeeting(): Meeting {
+  return {
+    id: `meeting-${Date.now()}`,
+    title: "",
+    from: "",
+    to: "",
+    relatedTo: "",
+    owner: "Jenny",
+  };
+}
+
+function exportMeetings(rows: Meeting[]) {
+  const stamp = new Date().toISOString().slice(0, 10);
+  exportRecordsCsv(`meetings-export-${stamp}.csv`, MEETING_IMPORT_FIELDS, rows);
+}
+
+function ImportMeetingsModal({
+  existing,
+  onClose,
+  onImport,
+}: {
+  existing: Meeting[];
+  onClose: () => void;
+  onImport: (created: Meeting[], updated: Meeting[]) => void;
+}) {
+  return (
+    <ImportRecordsModal
+      moduleLabel="Meetings"
+      recordLabel="Meeting"
+      fields={MEETING_IMPORT_FIELDS}
+      matchKey="title"
+      matchLabel="Title"
+      existing={existing}
+      getMatchValue={(meeting) => meeting.title}
+      createEmpty={createEmptyMeeting}
+      makeId={(index) => `meeting-import-${Date.now()}-${index}`}
+      templateFilename="meetings-import-template.csv"
+      onClose={onClose}
+      onImport={onImport}
+    />
+  );
+}
+
 function MeetingsWorkspace({
   createIntentId = null,
   onCreateHandled,
@@ -5108,6 +5313,7 @@ function MeetingsWorkspace({
   const [rows, setRows] = useState(() => [...meetings]);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Meeting | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [returnToHome, setReturnToHome] = useState(false);
 
   useEffect(() => {
@@ -5146,11 +5352,15 @@ function MeetingsWorkspace({
         data={rows}
         columns={meetingColumns}
         getCellValue={getMeetingCellValue}
+        createLabel="Create Meeting"
+        importLabel="Import Meetings"
         onCreate={() => {
           setEditing(null);
           setCreating(true);
           setReturnToHome(false);
         }}
+        onImport={() => setImportOpen(true)}
+        onExport={exportMeetings}
         renderRows={(visibleRows, orderedColumns) => (
           <tbody>
             {visibleRows.map((meeting) => (
@@ -5195,6 +5405,19 @@ function MeetingsWorkspace({
         )}
       />
       <CalendarWorkspace />
+      {importOpen ? (
+        <ImportMeetingsModal
+          existing={rows}
+          onClose={() => setImportOpen(false)}
+          onImport={(created, updated) => {
+            setRows((prev) => {
+              const updatedById = new Map(updated.map((meeting) => [meeting.id, meeting]));
+              const merged = prev.map((meeting) => updatedById.get(meeting.id) ?? meeting);
+              return [...created, ...merged];
+            });
+          }}
+        />
+      ) : null}
       {creating || editing ? (
         <QuickCreateModal
           key={editing?.id ?? "create-meeting"}
@@ -5277,6 +5500,60 @@ function getCallCellValue(call: Call, key: string) {
   return "";
 }
 
+
+const CALL_TYPE_OPTIONS: Call["type"][] = ["Inbound", "Outbound"];
+
+type CallImportFieldKey = Exclude<keyof Call, "id">;
+
+const CALL_IMPORT_FIELDS: ImportFieldDef<CallImportFieldKey>[] = [
+  { key: "subject", label: "Subject", required: true, sample: "Follow-up call" },
+  { key: "type", label: "Call Type", options: CALL_TYPE_OPTIONS, sample: "Outbound" },
+  { key: "startTime", label: "Call Start Time", sample: "2026-08-10 02:00 PM" },
+  { key: "duration", label: "Call Duration", sample: "00:15" },
+];
+
+function createEmptyCall(): Call {
+  return {
+    id: `call-${Date.now()}`,
+    subject: "",
+    type: "Outbound",
+    startTime: "",
+    duration: "00:00",
+  };
+}
+
+function exportCalls(rows: Call[]) {
+  const stamp = new Date().toISOString().slice(0, 10);
+  exportRecordsCsv(`calls-export-${stamp}.csv`, CALL_IMPORT_FIELDS, rows);
+}
+
+function ImportCallsModal({
+  existing,
+  onClose,
+  onImport,
+}: {
+  existing: Call[];
+  onClose: () => void;
+  onImport: (created: Call[], updated: Call[]) => void;
+}) {
+  return (
+    <ImportRecordsModal
+      moduleLabel="Calls"
+      recordLabel="Call"
+      fields={CALL_IMPORT_FIELDS}
+      matchKey="subject"
+      matchLabel="Subject"
+      existing={existing}
+      getMatchValue={(call) => call.subject}
+      createEmpty={createEmptyCall}
+      makeId={(index) => `call-import-${Date.now()}-${index}`}
+      templateFilename="calls-import-template.csv"
+      onClose={onClose}
+      onImport={onImport}
+    />
+  );
+}
+
 function CallsWorkspace({
   createIntentId = null,
   onCreateHandled,
@@ -5286,6 +5563,7 @@ function CallsWorkspace({
 }) {
   const [rows, setRows] = useState(() => [...calls]);
   const [creating, setCreating] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   useEffect(() => {
     if (createIntentId == null) return;
@@ -5301,7 +5579,11 @@ function CallsWorkspace({
         data={rows}
         columns={callColumns}
         getCellValue={getCallCellValue}
+        createLabel="Create Call"
+        importLabel="Import Calls"
         onCreate={() => setCreating(true)}
+        onImport={() => setImportOpen(true)}
+        onExport={exportCalls}
         renderRows={(visibleRows, orderedColumns) => (
           <tbody>
             {visibleRows.map((call) => (
@@ -5334,6 +5616,19 @@ function CallsWorkspace({
         )}
       />
       <CallForm />
+      {importOpen ? (
+        <ImportCallsModal
+          existing={rows}
+          onClose={() => setImportOpen(false)}
+          onImport={(created, updated) => {
+            setRows((prev) => {
+              const updatedById = new Map(updated.map((call) => [call.id, call]));
+              const merged = prev.map((call) => updatedById.get(call.id) ?? call);
+              return [...created, ...merged];
+            });
+          }}
+        />
+      ) : null}
       {creating ? (
         <QuickCreateModal
           title="Create Call"
@@ -5543,7 +5838,7 @@ function buildDealColumns(config: ProductPipelineConfig): ColumnDef[] {
       colorGroup: "soft",
       optionColors: {
         Identification: 1,
-        Evaluation: 5,
+        Evaluation: 0,
         Approval: 3,
         Execution: 4,
         Completion: 2,
@@ -6650,6 +6945,74 @@ function createEmptyCampaign(): Campaign {
   };
 }
 
+type CampaignImportFieldKey = Exclude<keyof Campaign, "id">;
+
+const CAMPAIGN_IMPORT_FIELDS: ImportFieldDef<CampaignImportFieldKey>[] = [
+  { key: "name", label: "Campaign Name", required: true, sample: "SME Working Capital Drive" },
+  { key: "code", label: "Campaign Code", required: true, sample: "CMP-2026-001" },
+  { key: "owner", label: "Campaign Owner", sample: "Jenny" },
+  { key: "type", label: "Type", options: CAMPAIGN_TYPE_OPTIONS, sample: "Client Acquisition" },
+  { key: "status", label: "Status", options: CAMPAIGN_STATUS_OPTIONS, sample: "Planning" },
+  { key: "channel", label: "Channel", options: CAMPAIGN_CHANNEL_OPTIONS, sample: "Email" },
+  {
+    key: "businessUnit",
+    label: "Business Unit",
+    options: LOAN_BUSINESS_UNIT_OPTIONS,
+    sample: "Corporate Banking",
+  },
+  { key: "targetSegment", label: "Target Segment", options: SEGMENT_OPTIONS, sample: "SME" },
+  { key: "targetRegion", label: "Target Region", options: REGION_OPTIONS, sample: "Hong Kong" },
+  {
+    key: "targetProduct",
+    label: "Target Product",
+    options: LOAN_PRODUCT_OPTIONS,
+    sample: "Term Loan",
+  },
+  { key: "currency", label: "Currency", options: LOAN_CURRENCY_OPTIONS, sample: "HKD" },
+  { key: "startDate", label: "Start Date", sample: "2026-08-01" },
+  { key: "endDate", label: "End Date", sample: "2026-09-30" },
+  { key: "expectedRevenue", label: "Expected Revenue", kind: "number", sample: "5000000" },
+  { key: "budgetedCost", label: "Budgeted Cost", kind: "number", sample: "250000" },
+  { key: "actualCost", label: "Actual Cost", kind: "number", sample: "120000" },
+  { key: "expectedResponsePct", label: "Expected Response %", kind: "number", sample: "8" },
+  { key: "numSent", label: "Num Sent", kind: "number", sample: "1200" },
+  { key: "leadsGenerated", label: "Leads Generated", kind: "number", sample: "96" },
+  { key: "convertedCount", label: "Converted", kind: "number", sample: "18" },
+  { key: "description", label: "Description", sample: "Outbound campaign for SME working capital." },
+];
+
+function exportCampaigns(rows: Campaign[]) {
+  const stamp = new Date().toISOString().slice(0, 10);
+  exportRecordsCsv(`event-trigger-export-${stamp}.csv`, CAMPAIGN_IMPORT_FIELDS, rows);
+}
+
+function ImportCampaignsModal({
+  existing,
+  onClose,
+  onImport,
+}: {
+  existing: Campaign[];
+  onClose: () => void;
+  onImport: (created: Campaign[], updated: Campaign[]) => void;
+}) {
+  return (
+    <ImportRecordsModal
+      moduleLabel="Event Trigger"
+      recordLabel="Campaign"
+      fields={CAMPAIGN_IMPORT_FIELDS}
+      matchKey="code"
+      matchLabel="Campaign Code"
+      existing={existing}
+      getMatchValue={(campaign) => campaign.code}
+      createEmpty={createEmptyCampaign}
+      makeId={(index) => `camp-import-${Date.now()}-${index}`}
+      templateFilename="event-trigger-import-template.csv"
+      onClose={onClose}
+      onImport={onImport}
+    />
+  );
+}
+
 type CampaignFormDraft = Omit<
   Campaign,
   "type" | "status" | "channel" | "businessUnit" | "targetSegment" | "targetRegion" | "targetProduct" | "currency"
@@ -7028,6 +7391,7 @@ function CampaignWorkspace({
 }) {
   const [rows, setRows] = useState<Campaign[]>(() => [...campaigns]);
   const [editing, setEditing] = useState<{ campaign: Campaign; mode: "create" | "edit" } | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [returnToHome, setReturnToHome] = useState(false);
 
   useEffect(() => {
@@ -7065,6 +7429,11 @@ function CampaignWorkspace({
       }
       return [next, ...prev];
     });
+  }
+
+  function startCreate() {
+    setEditing({ campaign: createEmptyCampaign(), mode: "create" });
+    setReturnToHome(false);
   }
 
   function renderCampaignCell(row: Campaign, column: ColumnDef) {
@@ -7105,47 +7474,63 @@ function CampaignWorkspace({
   }
 
   return (
-    <RecordListShell
-      title="All Campaigns"
-      filters={campaignFilters}
-      data={rows}
-      columns={campaignColumns}
-      getCellValue={getCampaignCellValue}
-      onCreate={() => {
-        setEditing({ campaign: createEmptyCampaign(), mode: "create" });
-        setReturnToHome(false);
-      }}
-      renderRows={(visibleRows, orderedColumns) => (
-        <tbody>
-          {visibleRows.map((row) => (
-            <tr
-              key={row.id}
-              className="is-row-interactive"
-              onDoubleClick={() => {
-                setEditing({ campaign: { ...row }, mode: "edit" });
-                setReturnToHome(false);
-              }}
-            >
-              {orderedColumns.map((column) => {
-                if (column.key === "select") {
-                  return (
-                    <td key={column.key} className="is-row-actions-col">
-                      {renderCampaignCell(row, column)}
-                    </td>
-                  );
-                }
-                if (column.type === "enum" && column.colorable !== false) {
-                  const raw = row[column.key as keyof Campaign];
-                  const value = raw == null || raw === "" ? null : String(raw);
-                  return <EnumFillTd key={column.key} column={column} value={value} />;
-                }
-                return <td key={column.key}>{renderCampaignCell(row, column)}</td>;
-              })}
-            </tr>
-          ))}
-        </tbody>
-      )}
-    />
+    <>
+      <RecordListShell
+        title="All Campaigns"
+        filters={campaignFilters}
+        data={rows}
+        columns={campaignColumns}
+        getCellValue={getCampaignCellValue}
+        createLabel="Create Campaign"
+        importLabel="Import Campaigns"
+        onCreate={startCreate}
+        onImport={() => setImportOpen(true)}
+        onExport={exportCampaigns}
+        renderRows={(visibleRows, orderedColumns) => (
+          <tbody>
+            {visibleRows.map((row) => (
+              <tr
+                key={row.id}
+                className="is-row-interactive"
+                onDoubleClick={() => {
+                  setEditing({ campaign: { ...row }, mode: "edit" });
+                  setReturnToHome(false);
+                }}
+              >
+                {orderedColumns.map((column) => {
+                  if (column.key === "select") {
+                    return (
+                      <td key={column.key} className="is-row-actions-col">
+                        {renderCampaignCell(row, column)}
+                      </td>
+                    );
+                  }
+                  if (column.type === "enum" && column.colorable !== false) {
+                    const raw = row[column.key as keyof Campaign];
+                    const value = raw == null || raw === "" ? null : String(raw);
+                    return <EnumFillTd key={column.key} column={column} value={value} />;
+                  }
+                  return <td key={column.key}>{renderCampaignCell(row, column)}</td>;
+                })}
+              </tr>
+            ))}
+          </tbody>
+        )}
+      />
+      {importOpen ? (
+        <ImportCampaignsModal
+          existing={rows}
+          onClose={() => setImportOpen(false)}
+          onImport={(created, updated) => {
+            setRows((prev) => {
+              const updatedById = new Map(updated.map((campaign) => [campaign.id, campaign]));
+              const merged = prev.map((campaign) => updatedById.get(campaign.id) ?? campaign);
+              return [...created, ...merged];
+            });
+          }}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -7537,9 +7922,58 @@ function UserFormModal({
   );
 }
 
+
+type UserImportFieldKey = Exclude<keyof DemoUser, "id" | "password" | "lastLogin">;
+
+const USER_IMPORT_FIELDS: ImportFieldDef<UserImportFieldKey>[] = [
+  { key: "displayName", label: "Display Name", required: true, sample: "Alice Chan" },
+  { key: "username", label: "Username", required: true, sample: "alice.chan" },
+  { key: "status", label: "Status", options: USER_STATUS_OPTIONS, sample: "Active" },
+  { key: "role", label: "Role", options: USER_ROLE_OPTIONS, sample: "RM" },
+  { key: "profile", label: "Profile", options: USER_PROFILE_OPTIONS, sample: "Standard" },
+  { key: "bu", label: "BU", options: USER_BU_OPTIONS, sample: "CBA-A-A1" },
+  { key: "department", label: "Department", options: USER_DEPARTMENT_OPTIONS, sample: "Corporate Banking" },
+  { key: "manager", label: "Manager", sample: "Jenny" },
+  { key: "outlookEmail", label: "Outlook", sample: "alice.chan@example.com" },
+  { key: "mobile", label: "Mobile", sample: "+852 9000 2002" },
+];
+
+function exportUsers(rows: DemoUser[]) {
+  const stamp = new Date().toISOString().slice(0, 10);
+  exportRecordsCsv(`users-export-${stamp}.csv`, USER_IMPORT_FIELDS, rows);
+}
+
+function ImportUsersModal({
+  existing,
+  onClose,
+  onImport,
+}: {
+  existing: DemoUser[];
+  onClose: () => void;
+  onImport: (created: DemoUser[], updated: DemoUser[]) => void;
+}) {
+  return (
+    <ImportRecordsModal
+      moduleLabel="Users"
+      recordLabel="User"
+      fields={USER_IMPORT_FIELDS}
+      matchKey="username"
+      matchLabel="Username"
+      existing={existing}
+      getMatchValue={(user) => user.username}
+      createEmpty={createEmptyUser}
+      makeId={(index) => String(200000 + index)}
+      templateFilename="users-import-template.csv"
+      onClose={onClose}
+      onImport={onImport}
+    />
+  );
+}
+
 function UsersWorkspace({ onBack }: { onBack: () => void }) {
   const [rows, setRows] = useState<DemoUser[]>(() => demoUsers.map((user) => ({ ...user })));
   const [editing, setEditing] = useState<{ user: DemoUser; mode: "create" | "edit" } | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   function handleSave(next: DemoUser) {
     setRows((prev) => {
@@ -7609,7 +8043,11 @@ function UsersWorkspace({ onBack }: { onBack: () => void }) {
         data={rows}
         columns={userColumns}
         getCellValue={getUserCellValue}
+        createLabel="Create User"
+        importLabel="Import Users"
         onCreate={() => setEditing({ user: createEmptyUser(), mode: "create" })}
+        onImport={() => setImportOpen(true)}
+        onExport={exportUsers}
         renderRows={(visibleRows, orderedColumns) => (
           <tbody>
             {visibleRows.map((user) => (
@@ -7638,6 +8076,19 @@ function UsersWorkspace({ onBack }: { onBack: () => void }) {
           </tbody>
         )}
       />
+      {importOpen ? (
+        <ImportUsersModal
+          existing={rows}
+          onClose={() => setImportOpen(false)}
+          onImport={(created, updated) => {
+            setRows((prev) => {
+              const updatedById = new Map(updated.map((user) => [user.id, user]));
+              const merged = prev.map((user) => updatedById.get(user.id) ?? user);
+              return [...created, ...merged];
+            });
+          }}
+        />
+      ) : null}
       {editing ? (
         <UserFormModal
           user={editing.user}
@@ -7862,6 +8313,69 @@ function createEmptyContact(): Contact {
     lastContacted: "",
     notes: "",
   };
+}
+
+
+type ContactImportFieldKey = Exclude<keyof Contact, "id" | "accountId">;
+
+const CONTACT_IMPORT_FIELDS: ImportFieldDef<ContactImportFieldKey>[] = [
+  { key: "name", label: "Contact Name", required: true, sample: "Art Venere" },
+  { key: "title", label: "Job Title", sample: "CFO" },
+  { key: "account", label: "Client", sample: "King (Sample)" },
+  { key: "status", label: "Status", options: CONTACT_STATUS_OPTIONS, sample: "Active" },
+  { key: "role", label: "Role", options: CONTACT_ROLE_OPTIONS, sample: "Primary Contact" },
+  { key: "email", label: "Email", required: true, sample: "art.venere@example.com" },
+  { key: "phone", label: "Phone", sample: "+852 2500 1001" },
+  { key: "mobile", label: "Mobile", sample: "+852 9000 1001" },
+  { key: "department", label: "Department", sample: "Finance" },
+  {
+    key: "preferredChannel",
+    label: "Preferred Channel",
+    options: CONTACT_CHANNEL_OPTIONS,
+    sample: "Email",
+  },
+  { key: "region", label: "Region", options: REGION_OPTIONS, sample: "Hong Kong" },
+  { key: "decisionMaker", label: "Decision Maker", kind: "boolean", sample: "Yes" },
+  { key: "owner", label: "Owner", sample: "Jenny" },
+  { key: "lastContacted", label: "Last Contacted", sample: "2026-07-15" },
+  { key: "notes", label: "Notes", sample: "Key contact for credit reviews." },
+];
+
+function exportContacts(rows: Contact[]) {
+  const stamp = new Date().toISOString().slice(0, 10);
+  exportRecordsCsv(`contacts-export-${stamp}.csv`, CONTACT_IMPORT_FIELDS, rows, (record, key) => {
+    const value = record[key];
+    if (value == null) return "";
+    if (typeof value === "boolean") return value ? "Yes" : "No";
+    return String(value);
+  });
+}
+
+function ImportContactsModal({
+  existing,
+  onClose,
+  onImport,
+}: {
+  existing: Contact[];
+  onClose: () => void;
+  onImport: (created: Contact[], updated: Contact[]) => void;
+}) {
+  return (
+    <ImportRecordsModal
+      moduleLabel="Contacts"
+      recordLabel="Contact"
+      fields={CONTACT_IMPORT_FIELDS}
+      matchKey="email"
+      matchLabel="Email"
+      existing={existing}
+      getMatchValue={(contact) => contact.email}
+      createEmpty={createEmptyContact}
+      makeId={(index) => `con-import-${Date.now()}-${index}`}
+      templateFilename="contacts-import-template.csv"
+      onClose={onClose}
+      onImport={onImport}
+    />
+  );
 }
 
 type ContactFormDraft = Omit<Contact, "status" | "role" | "preferredChannel" | "region"> & {
@@ -8182,6 +8696,7 @@ function ContactsWorkspace({
 }) {
   const [rows, setRows] = useState<Contact[]>(() => [...contacts]);
   const [editing, setEditing] = useState<{ contact: Contact; mode: "create" | "edit" } | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [returnToHome, setReturnToHome] = useState(false);
 
   useEffect(() => {
@@ -8253,10 +8768,14 @@ function ContactsWorkspace({
         data={rows}
         columns={contactColumns}
         getCellValue={getContactCellValue}
+        createLabel="Create Contact"
+        importLabel="Import Contacts"
         onCreate={() => {
           setEditing({ contact: createEmptyContact(), mode: "create" });
           setReturnToHome(false);
         }}
+        onImport={() => setImportOpen(true)}
+        onExport={exportContacts}
         renderRows={(visibleRows, orderedColumns) => (
           <tbody>
             {visibleRows.map((row) => (
@@ -8288,6 +8807,19 @@ function ContactsWorkspace({
           </tbody>
         )}
       />
+      {importOpen ? (
+        <ImportContactsModal
+          existing={rows}
+          onClose={() => setImportOpen(false)}
+          onImport={(created, updated) => {
+            setRows((prev) => {
+              const updatedById = new Map(updated.map((contact) => [contact.id, contact]));
+              const merged = prev.map((contact) => updatedById.get(contact.id) ?? contact);
+              return [...created, ...merged];
+            });
+          }}
+        />
+      ) : null}
       {editing ? (
         <ContactFormModal
           key={editing.mode === "create" ? "create-contact" : editing.contact.id}
