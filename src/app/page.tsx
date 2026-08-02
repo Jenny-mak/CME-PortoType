@@ -204,7 +204,7 @@ const accentColors = [
   { key: "vividBlue", label: "Vivid Blue", value: "#1677ff" },
   { key: "signalRed", label: "Signal Red", value: "#b81020" },
   { key: "skyBlue", label: "Sky Blue", value: "#288cfa" },
-  { key: "cloudGray", label: "Cloud Gray", value: "#f7f8fa", mark: "#8a8f98" },
+  { key: "cloudGray", label: "Cloud Gray", value: "#f8f8f8", mark: "#8a8f98" },
 ] as const satisfies ReadonlyArray<AccentColor>;
 
 type AccentKey = (typeof accentColors)[number]["key"];
