@@ -1250,8 +1250,8 @@ html[data-mode="night"] .account-avatar {
 }
 
 .list-new-button {
-  background: var(--panel);
-  border-color: color-mix(in srgb, var(--text) 24%, var(--line));
+  background: transparent;
+  border: 0;
   color: var(--text);
   cursor: pointer;
   font-size: 13.5px;

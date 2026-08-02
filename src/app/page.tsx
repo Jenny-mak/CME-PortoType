@@ -4991,47 +4991,9 @@ const TASK_IMPORT_FIELDS: ImportFieldDef<TaskImportFieldKey>[] = [
   { key: "account", label: "Account", sample: "King (Sample)" },
 ];
 
-function createEmptyTask(): Task {
-  return {
-    id: `task-${Date.now()}`,
-    subject: "",
-    dueDate: "",
-    status: "Not Started",
-    priority: "Normal",
-    account: "",
-  };
-}
-
 function exportTasks(rows: Task[]) {
   const stamp = new Date().toISOString().slice(0, 10);
   exportRecordsCsv(`tasks-export-${stamp}.csv`, TASK_IMPORT_FIELDS, rows);
-}
-
-function ImportTasksModal({
-  existing,
-  onClose,
-  onImport,
-}: {
-  existing: Task[];
-  onClose: () => void;
-  onImport: (created: Task[], updated: Task[]) => void;
-}) {
-  return (
-    <ImportRecordsModal
-      moduleLabel="Tasks"
-      recordLabel="Task"
-      fields={TASK_IMPORT_FIELDS}
-      matchKey="subject"
-      matchLabel="Subject"
-      existing={existing}
-      getMatchValue={(task) => task.subject}
-      createEmpty={createEmptyTask}
-      makeId={(index) => `task-import-${Date.now()}-${index}`}
-      templateFilename="tasks-import-template.csv"
-      onClose={onClose}
-      onImport={onImport}
-    />
-  );
 }
 
 function TasksWorkspace({
@@ -5050,7 +5012,6 @@ function TasksWorkspace({
   const [rows, setRows] = useState(() => [...tasks]);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
-  const [importOpen, setImportOpen] = useState(false);
   const [returnToHome, setReturnToHome] = useState(false);
 
   useEffect(() => {
@@ -5089,14 +5050,11 @@ function TasksWorkspace({
         data={rows}
         columns={taskColumns}
         getCellValue={getTaskCellValue}
-        createLabel="Create Task"
-        importLabel="Import Tasks"
         onCreate={() => {
           setEditing(null);
           setCreating(true);
           setReturnToHome(false);
         }}
-        onImport={() => setImportOpen(true)}
         onExport={exportTasks}
         renderRows={(visibleRows, orderedColumns) => (
           <tbody>
@@ -5145,19 +5103,6 @@ function TasksWorkspace({
           </tbody>
         )}
       />
-      {importOpen ? (
-        <ImportTasksModal
-          existing={rows}
-          onClose={() => setImportOpen(false)}
-          onImport={(created, updated) => {
-            setRows((prev) => {
-              const updatedById = new Map(updated.map((task) => [task.id, task]));
-              const merged = prev.map((task) => updatedById.get(task.id) ?? task);
-              return [...created, ...merged];
-            });
-          }}
-        />
-      ) : null}
       {creating || editing ? (
         <QuickCreateModal
           title={editing ? "Edit Task" : "Create Task"}
@@ -5244,54 +5189,6 @@ function getMeetingCellValue(meeting: Meeting, key: string) {
 }
 
 
-type MeetingImportFieldKey = Exclude<keyof Meeting, "id">;
-
-const MEETING_IMPORT_FIELDS: ImportFieldDef<MeetingImportFieldKey>[] = [
-  { key: "title", label: "Title", required: true, sample: "Client Kickoff" },
-  { key: "from", label: "From", sample: "2026-08-10 09:00 AM" },
-  { key: "to", label: "To", sample: "2026-08-10 10:00 AM" },
-  { key: "relatedTo", label: "Related To", sample: "King (Sample)" },
-  { key: "owner", label: "Owner", sample: "Jenny" },
-];
-
-function createEmptyMeeting(): Meeting {
-  return {
-    id: `meeting-${Date.now()}`,
-    title: "",
-    from: "",
-    to: "",
-    relatedTo: "",
-    owner: "Jenny",
-  };
-}
-
-function ImportMeetingsModal({
-  existing,
-  onClose,
-  onImport,
-}: {
-  existing: Meeting[];
-  onClose: () => void;
-  onImport: (created: Meeting[], updated: Meeting[]) => void;
-}) {
-  return (
-    <ImportRecordsModal
-      moduleLabel="Meetings"
-      recordLabel="Meeting"
-      fields={MEETING_IMPORT_FIELDS}
-      matchKey="title"
-      matchLabel="Title"
-      existing={existing}
-      getMatchValue={(meeting) => meeting.title}
-      createEmpty={createEmptyMeeting}
-      makeId={(index) => `meeting-import-${Date.now()}-${index}`}
-      templateFilename="meetings-import-template.csv"
-      onClose={onClose}
-      onImport={onImport}
-    />
-  );
-}
-
 function MeetingsWorkspace({
   createIntentId = null,
   onCreateHandled,
@@ -5308,7 +5205,6 @@ function MeetingsWorkspace({
   const [rows, setRows] = useState(() => [...meetings]);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Meeting | null>(null);
-  const [importOpen, setImportOpen] = useState(false);
   const [returnToHome, setReturnToHome] = useState(false);
 
   useEffect(() => {
@@ -5347,14 +5243,11 @@ function MeetingsWorkspace({
         data={rows}
         columns={meetingColumns}
         getCellValue={getMeetingCellValue}
-        createLabel="Create Meeting"
-        importLabel="Import Meetings"
         onCreate={() => {
           setEditing(null);
           setCreating(true);
           setReturnToHome(false);
         }}
-        onImport={() => setImportOpen(true)}
         renderRows={(visibleRows, orderedColumns) => (
           <tbody>
             {visibleRows.map((meeting) => (
@@ -5399,19 +5292,6 @@ function MeetingsWorkspace({
         )}
       />
       <CalendarWorkspace />
-      {importOpen ? (
-        <ImportMeetingsModal
-          existing={rows}
-          onClose={() => setImportOpen(false)}
-          onImport={(created, updated) => {
-            setRows((prev) => {
-              const updatedById = new Map(updated.map((meeting) => [meeting.id, meeting]));
-              const merged = prev.map((meeting) => updatedById.get(meeting.id) ?? meeting);
-              return [...created, ...merged];
-            });
-          }}
-        />
-      ) : null}
       {creating || editing ? (
         <QuickCreateModal
           key={editing?.id ?? "create-meeting"}
@@ -5495,54 +5375,6 @@ function getCallCellValue(call: Call, key: string) {
 }
 
 
-const CALL_TYPE_OPTIONS: Call["type"][] = ["Inbound", "Outbound"];
-
-type CallImportFieldKey = Exclude<keyof Call, "id">;
-
-const CALL_IMPORT_FIELDS: ImportFieldDef<CallImportFieldKey>[] = [
-  { key: "subject", label: "Subject", required: true, sample: "Follow-up call" },
-  { key: "type", label: "Call Type", options: CALL_TYPE_OPTIONS, sample: "Outbound" },
-  { key: "startTime", label: "Call Start Time", sample: "2026-08-10 02:00 PM" },
-  { key: "duration", label: "Call Duration", sample: "00:15" },
-];
-
-function createEmptyCall(): Call {
-  return {
-    id: `call-${Date.now()}`,
-    subject: "",
-    type: "Outbound",
-    startTime: "",
-    duration: "00:00",
-  };
-}
-
-function ImportCallsModal({
-  existing,
-  onClose,
-  onImport,
-}: {
-  existing: Call[];
-  onClose: () => void;
-  onImport: (created: Call[], updated: Call[]) => void;
-}) {
-  return (
-    <ImportRecordsModal
-      moduleLabel="Calls"
-      recordLabel="Call"
-      fields={CALL_IMPORT_FIELDS}
-      matchKey="subject"
-      matchLabel="Subject"
-      existing={existing}
-      getMatchValue={(call) => call.subject}
-      createEmpty={createEmptyCall}
-      makeId={(index) => `call-import-${Date.now()}-${index}`}
-      templateFilename="calls-import-template.csv"
-      onClose={onClose}
-      onImport={onImport}
-    />
-  );
-}
-
 function CallsWorkspace({
   createIntentId = null,
   onCreateHandled,
@@ -5552,7 +5384,6 @@ function CallsWorkspace({
 }) {
   const [rows, setRows] = useState(() => [...calls]);
   const [creating, setCreating] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
 
   useEffect(() => {
     if (createIntentId == null) return;
@@ -5568,10 +5399,7 @@ function CallsWorkspace({
         data={rows}
         columns={callColumns}
         getCellValue={getCallCellValue}
-        createLabel="Create Call"
-        importLabel="Import Calls"
         onCreate={() => setCreating(true)}
-        onImport={() => setImportOpen(true)}
         renderRows={(visibleRows, orderedColumns) => (
           <tbody>
             {visibleRows.map((call) => (
@@ -5604,19 +5432,6 @@ function CallsWorkspace({
         )}
       />
       <CallForm />
-      {importOpen ? (
-        <ImportCallsModal
-          existing={rows}
-          onClose={() => setImportOpen(false)}
-          onImport={(created, updated) => {
-            setRows((prev) => {
-              const updatedById = new Map(updated.map((call) => [call.id, call]));
-              const merged = prev.map((call) => updatedById.get(call.id) ?? call);
-              return [...created, ...merged];
-            });
-          }}
-        />
-      ) : null}
       {creating ? (
         <QuickCreateModal
           title="Create Call"
