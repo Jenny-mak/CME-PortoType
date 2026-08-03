@@ -9,6 +9,7 @@ type DateFieldProps = {
   className?: string;
   value: string;
   onChange: (value: string) => void;
+  placeholder?: string;
 };
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -100,6 +101,7 @@ export function DateField({
   className = "field",
   value,
   onChange,
+  placeholder = "mm / dd / yyyy",
 }: DateFieldProps) {
   const buttonId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -334,7 +336,7 @@ export function DateField({
         onClick={() => (open ? setOpen(false) : openPicker())}
       >
         <span className={value ? "date-field-value" : "date-field-placeholder"}>
-          {value ? toDisplay(value) : "mm / dd / yyyy"}
+          {value ? toDisplay(value) : placeholder}
         </span>
         <Calendar className="date-field-icon" size={14} strokeWidth={1.75} aria-hidden />
       </button>

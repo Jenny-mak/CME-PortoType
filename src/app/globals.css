@@ -1624,11 +1624,17 @@ html[data-mode="night"] .mode-toggle {
   padding: 6px 18px 20px;
 }
 
+.content:has(> .home-page),
+.content:has(> .reports-page) {
+  gap: 4px;
+  /* Match Clients list density: tight chrome-to-content + side gutters */
+  padding: 2px 4px 2px;
+}
+
 .content:has(> .home-page) {
   height: calc(100vh - 46px);
   max-height: calc(100vh - 46px);
   overflow: hidden;
-  padding-bottom: 12px;
 }
 
 /* List views: keep chrome fixed; scroll only inside the table */
@@ -1870,7 +1876,7 @@ html[data-mode="night"] .mode-toggle {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
   height: 100%;
   min-height: 0;
 }
@@ -2002,7 +2008,7 @@ html[data-mode="night"] .home-quick-access-item.is-training .home-quick-access-l
 }
 
 .home-cross {
-  --home-cross-gap: 14px;
+  --home-cross-gap: 8px;
   display: grid;
   flex: 1;
   gap: var(--home-cross-gap);
@@ -3650,7 +3656,7 @@ button.pill {
     height: auto;
     max-height: none;
     overflow: visible;
-    padding-bottom: 20px;
+    padding-bottom: 8px;
   }
 
   .home-page {
@@ -8443,15 +8449,15 @@ html[data-mode="night"] .loan-stage-tooltip::after {
 .reports-page {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
   min-height: 0;
-  padding-bottom: 24px;
+  padding-bottom: 8px;
 }
 
 .reports-header {
   align-items: flex-start;
   display: flex;
-  gap: 16px;
+  gap: 12px;
   justify-content: space-between;
 }
 
@@ -8468,7 +8474,7 @@ html[data-mode="night"] .loan-stage-tooltip::after {
 
 .report-kpi-strip {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
@@ -8480,7 +8486,7 @@ html[data-mode="night"] .loan-stage-tooltip::after {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 14px 16px;
+  padding: 10px 12px;
 }
 
 .report-kpi-label {
@@ -8506,7 +8512,7 @@ html[data-mode="night"] .loan-stage-tooltip::after {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 16px;
+  gap: 8px 12px;
   justify-content: space-between;
 }
 
@@ -8550,7 +8556,7 @@ html[data-mode="night"] .loan-stage-tooltip::after {
 
 .report-grid {
   display: grid;
-  gap: 12px;
+  gap: 8px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
