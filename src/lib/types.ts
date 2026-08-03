@@ -180,6 +180,17 @@ export type LoanApprovalAuthority =
   | "Regional Credit"
   | "Head Office";
 
+/** Sub-records under a Loan (deals module only). */
+export type LoanFacility = {
+  id: string;
+  loanId: string;
+  name: string;
+  tranche: string;
+  currency: "CNY" | "HKD" | "USD" | "SGD";
+  amount: number;
+  status: LoanFacilityStatus;
+};
+
 export type Deal = {
   id: string;
   name: string;

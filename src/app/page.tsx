@@ -16,7 +16,9 @@ import {
   ClipboardList,
   Clock3,
   CreditCard,
+  Download,
   FileText,
+  Filter,
   GripVertical,
   HeartPulse,
   Landmark,
@@ -34,6 +36,7 @@ import {
   RefreshCcw,
   Search,
   Ship,
+  Sparkles,
   Sun,
   Users,
   X,
@@ -51,6 +54,8 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { AiChatWidget } from "@/components/AiChatWidget";
+import { ImportRecordsModal } from "@/components/ImportRecordsModal";
+import { ClientKanbanBoard } from "@/components/ClientKanbanBoard";
 import { DateField } from "@/components/DateField";
 import { HomeCalendar, HomeLoansClosing } from "@/components/HomeCalendar";
 import {
@@ -74,6 +79,7 @@ import {
   deals,
   leadFilters,
   leads,
+  loanFacilities,
   meetings,
   modules,
   productPipelineData,
@@ -96,6 +102,7 @@ import {
   type ProductPipelineConfig,
   type ProductPipelineModuleKey,
 } from "@/lib/product-pipeline";
+import { exportRecordsCsv, type ImportFieldDef } from "@/lib/csv-import";
 import { resolveOptionColor } from "@/lib/option-colors";
 import {
   applyColumnSortFilter,
@@ -191,23 +198,13 @@ type QuickCreateField = {
 type AccentColor = { key: string; label: string; value: string; mark?: string };
 
 const accentColors = [
-  { key: "adminGray", label: "Admin Gray", value: "#5a6572", mark: "#7b8794" },
   { key: "crimson", label: "Crimson", value: "#a31d31", mark: "#cf4651" },
-  { key: "garnet", label: "Garnet", value: "#9b353f", mark: "#c24d58" },
-  { key: "darkRaspberry", label: "Dark Raspberry", value: "#922b60" },
-  { key: "grape", label: "Grape", value: "#6b21a8" },
-  { key: "jadeGreen", label: "Jade Green", value: "#006b3f" },
+  { key: "oceanBlue", label: "Ocean Blue", value: "#004b97" },
   { key: "ledgerGreen", label: "Ledger Green", value: "#00875a" },
-  { key: "marineNavy", label: "Marine Navy", value: "#003087" },
-  { key: "deepSlate", label: "Deep Slate", value: "#2a3756", mark: "#4a5f8a" },
-  { key: "brightBlue", label: "Bright Blue", value: "#44599d", mark: "#3d7cf5" },
-  { key: "inkNavy", label: "Ink Navy", value: "#0a1628" },
-  { key: "forestMist", label: "Forest Mist", value: "#2f5d45" },
-  { key: "skyMeadow", label: "Sky Meadow", value: "#3b6b8c" },
-  { key: "twilightPond", label: "Twilight Pond", value: "#3a5f6e" },
-  { key: "softClay", label: "Soft Clay", value: "#8a5a40" },
-  { key: "moonIndigo", label: "Moon Indigo", value: "#4a4570" },
-  { key: "flatNight", label: "Flat Night", value: "#242427", mark: "#3d3d42" },
+  { key: "vividBlue", label: "Vivid Blue", value: "#1677ff" },
+  { key: "signalRed", label: "Signal Red", value: "#b81020" },
+  { key: "skyBlue", label: "Sky Blue", value: "#288cfa" },
+  { key: "cloudGray", label: "Cloud Gray", value: "#f8f8f8", mark: "#8a8f98" },
 ] as const satisfies ReadonlyArray<AccentColor>;
 
 type AccentKey = (typeof accentColors)[number]["key"];
@@ -238,6 +235,21 @@ function mixWithWhite(hex: string, ratio: number) {
 
 function lighten(hex: string, amount: number) {
   return mixWithWhite(hex, Math.min(1, Math.max(0, amount / 255)));
+}
+
+/** WCAG relative luminance, used to detect accents too light to carry white text. */
+function relativeLuminance(hex: string) {
+  const raw = hex.replace("#", "");
+  const num = Number.parseInt(raw, 16);
+  const channel = (value: number) => {
+    const srgb = value / 255;
+    return srgb <= 0.03928 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
+  };
+  return (
+    0.2126 * channel((num >> 16) & 255) +
+    0.7152 * channel((num >> 8) & 255) +
+    0.0722 * channel(num & 255)
+  );
 }
 
 function darken(hex: string, amount: number) {
@@ -287,12 +299,11 @@ function BrandMark({ size = 28 }: { size?: number }) {
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
     >
-      <rect width="28" height="28" rx="6.5" fill="var(--brand-mark)" />
       {/* Interlocking chain links (Creative Cloud–style) */}
       <g
         transform="translate(14 14) rotate(-45)"
         fill="none"
-        stroke="#fff"
+        stroke="currentColor"
         strokeWidth="1.75"
         strokeLinejoin="round"
         strokeLinecap="round"
@@ -380,6 +391,63 @@ function SidebarToggleIcon({ size = 18 }: { size?: number }) {
         stroke="currentColor"
         strokeWidth="1.75"
         strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function TableViewIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      {[5.5, 12, 18.5].map((y) => (
+        <g key={y}>
+          <rect x="3" y={y - 1.5} width="3" height="3" rx="0.9" fill="var(--brand)" />
+          <path
+            d={`M9 ${y}H21`}
+            stroke="currentColor"
+            strokeWidth="1.9"
+            strokeLinecap="round"
+          />
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+function KanbanViewIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <rect
+        x="4.4"
+        y="3.6"
+        width="6.4"
+        height="16.8"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <rect
+        x="13.2"
+        y="3.6"
+        width="6.4"
+        height="10.6"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="1.8"
       />
     </svg>
   );
@@ -553,68 +621,50 @@ export default function CRMWorkspace() {
 
     const applyTheme = (resolvedMode: "day" | "night") => {
       const isNight = resolvedMode === "night";
-      const isFlatNight = isNight && accentKey === "flatNight";
-      const flat = "#242427";
       const dayNav = themeTone === "lite" ? mixWithWhite(accent, 0.18) : accent;
       // Night: sidebar matches the dark shell; accent only tints it lightly.
       const nightNav =
         themeTone === "lite"
           ? mixHex(accent, "#34333c", 0.78)
           : mixHex(accent, "#2c2b34", 0.88);
-      const nav = isFlatNight ? flat : isNight ? nightNav : dayNav;
-      const brand = isFlatNight ? "#c9c9cd" : isNight ? lighten(accent, 58) : dayNav;
-      const brandSoft = isFlatNight
-        ? "#2e2e32"
-        : isNight
-          ? mixHex(accent, "#34323c", 0.7)
+      const nav = isNight ? nightNav : dayNav;
+      // A near-white sidebar cannot carry the white nav text/logo, so flip its
+      // foreground to ink and keep --brand dark for the white-on-brand buttons.
+      const isLightNav = !isNight && relativeLuminance(nav) > 0.6;
+      const ink = mixHex(accent, "#33373f", 0.9);
+      const brand = isNight ? lighten(accent, 58) : isLightNav ? ink : dayNav;
+      const brandSoft = isNight
+        ? mixHex(accent, "#34323c", 0.7)
+        : isLightNav
+          ? mixWithWhite(ink, 0.9)
           : mixWithWhite(accent, 0.88);
-      const brandMark = isFlatNight ? "#4a4a50" : getAccentMark(accentEntry, accent, isNight);
+      const brandMark = isLightNav ? ink : getAccentMark(accentEntry, accent, isNight);
 
       root.setAttribute("data-mode", resolvedMode);
-      if (isFlatNight) {
-        root.setAttribute("data-flat-night", "true");
-        root.style.setProperty("--bg", flat);
-        root.style.setProperty("--panel", flat);
-        root.style.setProperty("--panel-muted", flat);
-        root.style.setProperty("--line", "#3a3a3e");
-        root.style.setProperty("--text", "#f0f0f2");
-        root.style.setProperty("--text-secondary", "#b8b8bc");
-        root.style.setProperty("--muted", "#8e8e93");
-        root.style.setProperty("--shadow", "none");
-        root.style.setProperty("--nav-text", "rgb(255 255 255 / 62%)");
-        root.style.setProperty("--nav-active", "rgb(255 255 255 / 10%)");
-        root.style.setProperty("--nav-hover", "rgb(255 255 255 / 7%)");
+      if (isLightNav) {
+        root.setAttribute("data-light-nav", "true");
+        root.style.setProperty("--nav-text", "rgb(0 0 0 / 62%)");
+        root.style.setProperty("--nav-hover-text", ink);
+        root.style.setProperty("--nav-active", "rgb(0 0 0 / 8%)");
+        root.style.setProperty("--nav-hover", "rgb(0 0 0 / 5%)");
       } else {
-        root.removeAttribute("data-flat-night");
-        [
-          "--bg",
-          "--panel",
-          "--panel-muted",
-          "--line",
-          "--text",
-          "--text-secondary",
-          "--muted",
-          "--shadow",
-          "--nav-text",
-          "--nav-active",
-          "--nav-hover",
-        ].forEach((key) => root.style.removeProperty(key));
+        root.removeAttribute("data-light-nav");
+        ["--nav-text", "--nav-hover-text", "--nav-active", "--nav-hover"].forEach((key) =>
+          root.style.removeProperty(key),
+        );
       }
 
       root.style.setProperty("--nav", nav);
-      root.style.setProperty("--nav-soft", isFlatNight ? flat : isNight ? mixHex(nav, "#1e1d24", 0.35) : darken(nav, 14));
+      root.style.setProperty(
+        "--nav-soft",
+        isNight ? mixHex(nav, "#1e1d24", 0.35) : darken(nav, isLightNav ? 8 : 14),
+      );
       root.style.setProperty("--brand", brand);
       root.style.setProperty("--brand-soft", brandSoft);
       root.style.setProperty("--brand-mark", brandMark);
-      root.style.setProperty(
-        "--accent",
-        isFlatNight ? "#9a9aa0" : isNight ? lighten(accent, 46) : mixWithWhite(accent, 0.25),
-      );
+      root.style.setProperty("--accent", isNight ? lighten(accent, 46) : mixWithWhite(accent, 0.25));
       root.style.setProperty("--create-border", brand);
-      root.style.setProperty(
-        "--account-header",
-        isFlatNight ? flat : isNight ? mixHex(accent, "#2c2b34", 0.45) : dayNav,
-      );
+      root.style.setProperty("--account-header", isNight ? mixHex(accent, "#2c2b34", 0.45) : dayNav);
     };
 
     const resolveMode = () =>
@@ -909,15 +959,29 @@ const ModuleViewTabContext = createContext<{
   activeTab: "Main table",
   setActiveTab: () => {},
 });
+const ModuleFilterPanelContext = createContext<{
+  filtersOpen: boolean;
+  toggleFilters: () => void;
+}>({
+  filtersOpen: false,
+  toggleFilters: () => {},
+});
 
 function ModuleViewActionsProvider({ children }: { children: ReactNode }) {
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [activeTab, setActiveTab] = useState("Main table");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filterPanelValue = useMemo(
+    () => ({ filtersOpen, toggleFilters: () => setFiltersOpen((open) => !open) }),
+    [filtersOpen],
+  );
   return (
     <ModuleViewTabContext.Provider value={{ activeTab, setActiveTab }}>
-      <ModuleViewActionsHostSetterContext.Provider value={setHost}>
-        <ModuleViewActionsHostContext.Provider value={host}>{children}</ModuleViewActionsHostContext.Provider>
-      </ModuleViewActionsHostSetterContext.Provider>
+      <ModuleFilterPanelContext.Provider value={filterPanelValue}>
+        <ModuleViewActionsHostSetterContext.Provider value={setHost}>
+          <ModuleViewActionsHostContext.Provider value={host}>{children}</ModuleViewActionsHostContext.Provider>
+        </ModuleViewActionsHostSetterContext.Provider>
+      </ModuleFilterPanelContext.Provider>
     </ModuleViewTabContext.Provider>
   );
 }
@@ -939,6 +1003,22 @@ const MODULE_VIEW_TABS: Partial<Record<ModuleKey, string[]>> = {
   documents: ["Main table", "Files"],
 };
 
+const MODULE_VIEW_TAB_ICONS: Record<string, React.ReactNode> = {
+  "Main table": <TableViewIcon size={17} />,
+  Kanban: <KanbanViewIcon size={17} />,
+};
+
+/** Modules that use the Clients-style icon chrome: Main table + Kanban only, no “add view”. */
+const ICON_VIEW_MODULES = new Set<ModuleKey>([
+  "accounts",
+  "deals",
+  "tradeFinance",
+  "paymentService",
+  "sustainableFinance",
+  "globalMarket",
+  "lifeInsurance",
+]);
+
 function ModuleViewHeader({
   activeModule,
   accountsView = "All Clients",
@@ -954,7 +1034,10 @@ function ModuleViewHeader({
 }) {
   const moduleMeta = modules.find((module) => module.key === activeModule);
   const moduleLabel = moduleMeta?.label ?? activeModule;
-  const tabs = MODULE_VIEW_TABS[activeModule] ?? ["Main table"];
+  const useIconTabs = ICON_VIEW_MODULES.has(activeModule);
+  const tabs = useIconTabs
+    ? ["Main table", "Kanban"]
+    : (MODULE_VIEW_TABS[activeModule] ?? ["Main table"]);
   const { activeTab, setActiveTab } = useContext(ModuleViewTabContext);
   const viewOptions =
     activeModule === "accounts"
@@ -964,11 +1047,14 @@ function ModuleViewHeader({
   const selectedView = activeModule === "accounts" ? accountsView : internalView;
   const viewPickerRef = useRef<HTMLDetailsElement>(null);
   const setActionsHost = useContext(ModuleViewActionsHostSetterContext);
+  const { filtersOpen, toggleFilters } = useContext(ModuleFilterPanelContext);
 
   useEffect(() => {
-    const availableTabs = MODULE_VIEW_TABS[activeModule] ?? ["Main table"];
+    const availableTabs = useIconTabs
+      ? ["Main table", "Kanban"]
+      : (MODULE_VIEW_TABS[activeModule] ?? ["Main table"]);
     setActiveTab(initialTab && availableTabs.includes(initialTab) ? initialTab : "Main table");
-  }, [activeModule, setActiveTab, initialTab]);
+  }, [activeModule, setActiveTab, initialTab, useIconTabs]);
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
@@ -1034,21 +1120,36 @@ function ModuleViewHeader({
       </div>
       <div className="module-view-tabs-row">
         <nav className="module-view-tabs" aria-label={`${moduleLabel} views`}>
-          {tabs.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              className={`module-view-tab ${tab === activeTab ? "is-active" : ""}`}
-              onClick={() => setActiveTab(tab)}
-            >
-              {tab}
-            </button>
-          ))}
-          {activeModule !== "accounts" ? (
+          {tabs.map((tab) => {
+            const icon = useIconTabs ? MODULE_VIEW_TAB_ICONS[tab] : undefined;
+            return (
+              <button
+                key={tab}
+                type="button"
+                className={`module-view-tab ${icon ? "is-icon-tab" : ""} ${tab === activeTab ? "is-active" : ""}`}
+                onClick={() => setActiveTab(tab)}
+                aria-label={icon ? tab : undefined}
+                title={icon ? tab : undefined}
+              >
+                {icon ?? tab}
+              </button>
+            );
+          })}
+          {!useIconTabs ? (
             <button type="button" className="module-view-add" aria-label={`Add ${moduleLabel} view`}>
               <Plus size={16} />
             </button>
           ) : null}
+          <button
+            type="button"
+            className={`module-view-filter-toggle ${filtersOpen ? "is-active" : ""}`}
+            aria-label={filtersOpen ? "Hide filters" : "Show filters"}
+            aria-pressed={filtersOpen}
+            title={filtersOpen ? "Hide filters" : "Show filters"}
+            onClick={toggleFilters}
+          >
+            <Filter size={15} />
+          </button>
         </nav>
         <div className="module-view-actions" ref={setActionsHost} />
       </div>
@@ -1692,7 +1793,9 @@ function AccountPanel({
               <button
                 key={color.key}
                 type="button"
-                className={`accent-swatch ${accentKey === color.key ? "active" : ""}`}
+                className={`accent-swatch ${relativeLuminance(color.value) > 0.6 ? "is-light" : ""} ${
+                  accentKey === color.key ? "active" : ""
+                }`}
                 style={{ background: color.value }}
                 data-label={color.label}
                 aria-label={color.label}
@@ -2068,6 +2171,64 @@ function getLeadCellValue(lead: Lead, key: string) {
   return "";
 }
 
+
+const LEAD_STATUS_OPTIONS: Lead["status"][] = ["New", "Contacted", "Qualified", "Converted"];
+
+type LeadImportFieldKey = Exclude<keyof Lead, "id" | "tag">;
+
+const LEAD_IMPORT_FIELDS: ImportFieldDef<LeadImportFieldKey>[] = [
+  { key: "name", label: "Lead Name", required: true, sample: "Alex Chen" },
+  { key: "company", label: "Company", sample: "Everbright Trading Ltd" },
+  { key: "email", label: "Email", required: true, sample: "alex.chen@example.com" },
+  { key: "phone", label: "Phone", sample: "+852 2500 1234" },
+  { key: "owner", label: "Owner", sample: "Jenny" },
+  { key: "status", label: "Status", options: LEAD_STATUS_OPTIONS, sample: "New" },
+];
+
+function createEmptyLead(): Lead {
+  return {
+    id: `lead-${Date.now()}`,
+    name: "",
+    company: "",
+    email: "",
+    phone: "",
+    owner: "Jenny",
+    status: "New",
+  };
+}
+
+function exportLeads(rows: Lead[]) {
+  const stamp = new Date().toISOString().slice(0, 10);
+  exportRecordsCsv(`leads-export-${stamp}.csv`, LEAD_IMPORT_FIELDS, rows);
+}
+
+function ImportLeadsModal({
+  existing,
+  onClose,
+  onImport,
+}: {
+  existing: Lead[];
+  onClose: () => void;
+  onImport: (created: Lead[], updated: Lead[]) => void;
+}) {
+  return (
+    <ImportRecordsModal
+      moduleLabel="Leads"
+      recordLabel="Lead"
+      fields={LEAD_IMPORT_FIELDS}
+      matchKey="email"
+      matchLabel="Email"
+      existing={existing}
+      getMatchValue={(lead) => lead.email}
+      createEmpty={createEmptyLead}
+      makeId={(index) => `lead-import-${Date.now()}-${index}`}
+      templateFilename="leads-import-template.csv"
+      onClose={onClose}
+      onImport={onImport}
+    />
+  );
+}
+
 function LeadsWorkspace({
   detailTab,
   setDetailTab,
@@ -2088,6 +2249,7 @@ function LeadsWorkspace({
   const [rows, setRows] = useState(() => [...leads]);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Lead | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [returnToHome, setReturnToHome] = useState(false);
 
   useEffect(() => {
@@ -2126,11 +2288,15 @@ function LeadsWorkspace({
         data={rows}
         columns={leadColumns}
         getCellValue={getLeadCellValue}
+        createLabel="Create Lead"
+        importLabel="Import Leads"
         onCreate={() => {
           setEditing(null);
           setCreating(true);
           setReturnToHome(false);
         }}
+        onImport={() => setImportOpen(true)}
+        onExport={exportLeads}
         renderRows={(visibleRows, orderedColumns) => (
           <tbody>
             {visibleRows.map((lead) => (
@@ -2196,6 +2362,19 @@ function LeadsWorkspace({
         )}
       />
       <LeadDetail detailTab={detailTab} setDetailTab={setDetailTab} />
+      {importOpen ? (
+        <ImportLeadsModal
+          existing={rows}
+          onClose={() => setImportOpen(false)}
+          onImport={(created, updated) => {
+            setRows((prev) => {
+              const updatedById = new Map(updated.map((lead) => [lead.id, lead]));
+              const merged = prev.map((lead) => updatedById.get(lead.id) ?? lead);
+              return [...created, ...merged];
+            });
+          }}
+        />
+      ) : null}
       {creating || editing ? (
         <QuickCreateModal
           key={editing?.id ?? "create-lead"}
@@ -2983,6 +3162,79 @@ function ResizableTable({
   );
 }
 
+/** Split create button: primary action plus a caret menu for bulk import. */
+function ListCreateButton({
+  createLabel,
+  importLabel,
+  onCreate,
+  onImport,
+}: {
+  createLabel: string;
+  importLabel?: string;
+  onCreate?: () => void;
+  onImport?: () => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handlePointerDown(event: MouseEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setMenuOpen(false);
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [menuOpen]);
+
+  return (
+    <div className="list-create-split" ref={menuRef}>
+      <button
+        className="list-create-main"
+        type="button"
+        onClick={onCreate}
+        aria-label={createLabel}
+      >
+        + New
+      </button>
+      <button
+        className={`list-create-caret ${menuOpen ? "active" : ""}`}
+        type="button"
+        aria-label={`More ${createLabel} options`}
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        onClick={() => setMenuOpen((open) => !open)}
+      >
+        <ChevronDown size={14} />
+      </button>
+      {menuOpen ? (
+        <div className="list-create-menu" role="menu">
+          <button
+            className="list-create-menu-item"
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setMenuOpen(false);
+              onImport?.();
+            }}
+          >
+            {importLabel}
+            <Sparkles className="list-create-menu-sparkle" size={14} />
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function RecordListShell<T extends { id: string }>({
   title,
   filters,
@@ -2991,6 +3243,10 @@ function RecordListShell<T extends { id: string }>({
   getCellValue,
   renderRows,
   onCreate,
+  createLabel,
+  importLabel,
+  onImport,
+  onExport,
 }: {
   title: string;
   filters: string[];
@@ -2999,6 +3255,12 @@ function RecordListShell<T extends { id: string }>({
   getCellValue: (row: T, key: string) => string | number;
   renderRows: (rows: T[], orderedColumns: ColumnDef[]) => React.ReactNode;
   onCreate?: () => void;
+  /** When set, replaces the plain "+ New" button with a split create button. */
+  createLabel?: string;
+  importLabel?: string;
+  onImport?: () => void;
+  /** Receives the rows currently visible in the table, after sort and filters. */
+  onExport?: (rows: T[]) => void;
 }) {
   const columnsIdentity = useMemo(
     () =>
@@ -3039,6 +3301,7 @@ function RecordListShell<T extends { id: string }>({
   }, [sort, columnFilters, data]);
 
   const actionsHost = useContext(ModuleViewActionsHostContext);
+  const { filtersOpen } = useContext(ModuleFilterPanelContext);
 
   function handleRefresh() {
     if (refreshing) return;
@@ -3048,9 +3311,30 @@ function RecordListShell<T extends { id: string }>({
 
   const listActions = (
     <>
-      <button className="list-new-button" type="button" onClick={onCreate}>
-        + New
-      </button>
+      {createLabel ? (
+        <ListCreateButton
+          createLabel={createLabel}
+          importLabel={importLabel}
+          onCreate={onCreate}
+          onImport={onImport}
+        />
+      ) : (
+        <button className="list-new-button" type="button" onClick={onCreate}>
+          + New
+        </button>
+      )}
+      {onExport ? (
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={() => onExport(visibleRows)}
+          disabled={visibleRows.length === 0}
+          title={`Export ${visibleRows.length} record${visibleRows.length === 1 ? "" : "s"} as CSV`}
+        >
+          <Download size={15} />
+          Export
+        </button>
+      ) : null}
       <button
         className={`icon-button ${refreshing ? "is-refreshing" : ""}`}
         aria-label="Refresh"
@@ -3066,8 +3350,10 @@ function RecordListShell<T extends { id: string }>({
   );
 
   return (
-    <div className="record-layout">
-      <FilterPanel title={`Filter ${title.replace("All ", "")} by`} filters={filters} />
+    <div className={`record-layout ${filtersOpen ? "" : "is-filters-hidden"}`}>
+      {filtersOpen ? (
+        <FilterPanel title={`Filter ${title.replace("All ", "")} by`} filters={filters} />
+      ) : null}
       <section className="list-shell">
         {actionsHost
           ? createPortal(listActions, actionsHost)
@@ -3244,7 +3530,7 @@ function EnumFillTd({
   const fill = getEnumFillProps(column, value);
   return (
     <td className={fill.className} style={fill.style}>
-      {fill.label}
+      {fill.label ? <span className="enum-pill">{fill.label}</span> : null}
     </td>
   );
 }
@@ -3256,29 +3542,48 @@ function RiskRatingTd({ value }: { value: string | null | undefined }) {
     return <td className="is-enum-fill is-enum-empty client-meta-risk-none" />;
   }
   return (
-    <td className={`is-enum-fill client-meta-risk-${optionSlug(String(value))}`}>{value}</td>
+    <td className={`is-enum-fill client-meta-risk-${optionSlug(String(value))}`}>
+      <span className="enum-pill">{value}</span>
+    </td>
   );
 }
 
-/** Soft cool-family Client Status cell — distinct from Risk / KYC palettes. */
+/** Stage-style Client Status cell. */
 function ClientStatusTd({ value }: { value: string | null | undefined }) {
   const empty = value == null || value === "";
   if (empty) {
     return <td className="is-enum-fill is-enum-empty" />;
   }
   return (
-    <td className={`is-enum-fill client-meta-status-${optionSlug(String(value))}`}>{value}</td>
+    <td className={`is-enum-fill client-meta-status-${optionSlug(String(value))}`}>
+      <span className="enum-pill">{value}</span>
+    </td>
   );
 }
 
-/** Soft process-family KYC Status cell — distinct from Risk / Client Status palettes. */
+/** Stage-style KYC Status cell. */
 function KycStatusTd({ value }: { value: string | null | undefined }) {
   const empty = value == null || value === "";
   if (empty) {
     return <td className="is-enum-fill is-enum-empty" />;
   }
   return (
-    <td className={`is-enum-fill client-meta-kyc-${optionSlug(String(value))}`}>{value}</td>
+    <td className={`is-enum-fill client-meta-kyc-${optionSlug(String(value))}`}>
+      <span className="enum-pill">{value}</span>
+    </td>
+  );
+}
+
+/** Stage-style Account Status cell (Active / Inactive). */
+function AccountStatusTd({ value }: { value: string | null | undefined }) {
+  const empty = value == null || value === "";
+  if (empty) {
+    return <td className="is-enum-fill is-enum-empty" />;
+  }
+  return (
+    <td className={`is-enum-fill client-meta-account-${optionSlug(String(value))}`}>
+      <span className="enum-pill">{value}</span>
+    </td>
   );
 }
 
@@ -4345,6 +4650,69 @@ function ClientFormPage({
   );
 }
 
+type ImportFieldKey = Exclude<keyof Account, "id">;
+
+const CLIENT_IMPORT_FIELDS: ImportFieldDef<ImportFieldKey>[] = [
+  { key: "companyName", label: "Company Name", required: true, sample: "Everbright Trading Ltd" },
+  { key: "status", label: "Status", options: ACCOUNT_STATUS_OPTIONS, sample: "Active" },
+  { key: "clientStatus", label: "Client Status", options: CLIENT_STATUS_OPTIONS, sample: "ETB" },
+  { key: "segment", label: "Segment", options: SEGMENT_OPTIONS, sample: "Corporate" },
+  { key: "relationshipManager", label: "Relationship Manager", sample: "Alice Chan" },
+  { key: "phone", label: "Phone", sample: "+852 2500 1234" },
+  { key: "email", label: "Email", sample: "treasury@everbright.com" },
+  { key: "website", label: "Website", sample: "https://www.everbright.com" },
+  { key: "sicCode", label: "SIC Code", sample: "5199" },
+  { key: "industry", label: "Industry", options: INDUSTRY_OPTIONS, sample: "Retail & Consumer" },
+  { key: "rating", label: "Rating", options: RATING_OPTIONS, sample: "Warm" },
+  { key: "riskRating", label: "Risk Rating", options: RISK_RATING_OPTIONS, sample: "Low" },
+  { key: "kycStatus", label: "KYC Status", options: KYC_STATUS_OPTIONS, sample: "Approved" },
+  { key: "region", label: "Region", options: REGION_OPTIONS, sample: "Hong Kong" },
+  { key: "legalEntityType", label: "Legal Entity", options: LEGAL_ENTITY_OPTIONS, sample: "Limited Company" },
+  { key: "country", label: "Country", sample: "Hong Kong" },
+  { key: "city", label: "City", sample: "Kowloon" },
+  { key: "address", label: "Address", sample: "Unit 1203, 12/F, Kowloon Bay" },
+  { key: "annualRevenue", label: "Annual Revenue", sample: "HKD 120M" },
+  { key: "employeeCount", label: "Employees", sample: "180" },
+  { key: "creditLimit", label: "Credit Limit", sample: "HKD 20M" },
+  { key: "clientSince", label: "Client Since", sample: "2021-06-15" },
+  { key: "parentGroup", label: "Parent Group", sample: "Everbright Holdings" },
+  { key: "primaryIdType", label: "Primary ID Type", options: PRIMARY_ID_TYPE_OPTIONS, sample: "BR Number" },
+  { key: "primaryIdNumber", label: "Primary ID Number", sample: "BR-88213345" },
+];
+
+/** Exports clients using the import template layout so the file can be re-imported. */
+function exportClients(clients: Account[]) {
+  const stamp = new Date().toISOString().slice(0, 10);
+  exportRecordsCsv(`clients-export-${stamp}.csv`, CLIENT_IMPORT_FIELDS, clients);
+}
+
+function ImportClientsModal({
+  existing,
+  onClose,
+  onImport,
+}: {
+  existing: Account[];
+  onClose: () => void;
+  onImport: (created: Account[], updated: Account[]) => void;
+}) {
+  return (
+    <ImportRecordsModal
+      moduleLabel="Clients"
+      recordLabel="Client"
+      fields={CLIENT_IMPORT_FIELDS}
+      matchKey="companyName"
+      matchLabel="Company Name"
+      existing={existing}
+      getMatchValue={(account) => account.companyName}
+      createEmpty={createEmptyAccount}
+      makeId={(index) => `acc-import-${Date.now()}-${index}`}
+      templateFilename="clients-import-template.csv"
+      onClose={onClose}
+      onImport={onImport}
+    />
+  );
+}
+
 function AccountsWorkspace({
   view = "All Clients",
   createIntentId = null,
@@ -4362,8 +4730,12 @@ function AccountsWorkspace({
 }) {
   const [rows, setRows] = useState<Account[]>(() => [...accounts]);
   const [editing, setEditing] = useState<{ account: Account; mode: "create" | "edit" } | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [returnToHome, setReturnToHome] = useState(false);
   const viewRows = view === "Active Clients" ? rows.filter((account) => account.status === "Active") : rows;
+  const { activeTab } = useContext(ModuleViewTabContext);
+  const actionsHost = useContext(ModuleViewActionsHostContext);
+  const { filtersOpen } = useContext(ModuleFilterPanelContext);
 
   useEffect(() => {
     if (createIntentId == null) return;
@@ -4437,82 +4809,142 @@ function AccountsWorkspace({
     );
   }
 
-  return (
-    <RecordListShell
-      title={view}
-      filters={[
-        "Company Name",
-        "Status",
-        "Client Status",
-        "Segment",
-        "Relationship Manager",
-        "Phone",
-        "Email",
-        "SIC Code",
-        "Industry",
-        "Rating",
-        "Risk Rating",
-        "KYC Status",
-        "Region",
-        "Legal Entity",
-        "Country",
-        "City",
-        "Annual Revenue",
-        "Credit Limit",
-        "Parent Group",
-        "Primary ID Type",
-        "Primary ID Number",
-      ]}
-      data={viewRows}
-      columns={accountColumns}
-      getCellValue={getAccountCellValue}
-      onCreate={() => {
-        setEditing({ account: createEmptyAccount(), mode: "create" });
-        setReturnToHome(false);
+  function startCreate() {
+    setEditing({ account: createEmptyAccount(), mode: "create" });
+    setReturnToHome(false);
+  }
+
+  const clientModals = importOpen ? (
+    <ImportClientsModal
+      existing={rows}
+      onClose={() => setImportOpen(false)}
+      onImport={(created, updated) => {
+        setRows((prev) => {
+          const updatedById = new Map(updated.map((account) => [account.id, account]));
+          const merged = prev.map((account) => updatedById.get(account.id) ?? account);
+          return [...created, ...merged];
+        });
       }}
-      renderRows={(visibleRows, orderedColumns) => (
-        <tbody>
-          {visibleRows.map((account) => (
-            <tr
-              key={account.id}
-              className="is-row-interactive"
-              onDoubleClick={() => {
-                setEditing({ account: { ...account }, mode: "edit" });
-                setReturnToHome(false);
-              }}
-            >
-              {orderedColumns.map((column) => {
-                if (column.key === "select") {
-                  return (
-                    <td key={column.key} className="is-row-actions-col">
-                      {renderAccountCell(account, column)}
-                    </td>
-                  );
-                }
-                if (column.key === "riskRating") {
-                  const raw = account.riskRating;
-                  return <RiskRatingTd key={column.key} value={raw} />;
-                }
-                if (column.key === "clientStatus") {
-                  const raw = account.clientStatus;
-                  return <ClientStatusTd key={column.key} value={raw} />;
-                }
-                if (column.key === "kycStatus") {
-                  const raw = account.kycStatus;
-                  return <KycStatusTd key={column.key} value={raw} />;
-                }
-                if (column.type === "enum" && column.colorable !== false) {
-                  const raw = account[column.key as keyof Account];
-                  const value = raw == null || raw === "" ? null : String(raw);
-                  return <EnumFillTd key={column.key} column={column} value={value} />;
-                }
-                return <td key={column.key}>{renderAccountCell(account, column)}</td>;
-              })}
-            </tr>
-          ))}
-        </tbody>
-      )}
     />
+  ) : null;
+
+  if (activeTab === "Kanban") {
+    return (
+      <>
+        {actionsHost
+          ? createPortal(
+              <ListCreateButton
+                createLabel="Create Client"
+                importLabel="Import Clients"
+                onCreate={startCreate}
+                onImport={() => setImportOpen(true)}
+              />,
+              actionsHost,
+            )
+          : null}
+        <div className={`record-layout ${filtersOpen ? "" : "is-filters-hidden"}`}>
+          {filtersOpen ? (
+            <FilterPanel
+              title="Filter Clients by"
+              filters={["Company Name", "Status", "Client Status", "Segment", "Risk Rating", "Region"]}
+            />
+          ) : null}
+          <ClientKanbanBoard
+            clients={viewRows}
+            onOpenClient={(client) => {
+              setEditing({ account: { ...client }, mode: "edit" });
+              setReturnToHome(false);
+            }}
+          />
+        </div>
+        {clientModals}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <RecordListShell
+        title={view}
+        filters={[
+          "Company Name",
+          "Status",
+          "Client Status",
+          "Segment",
+          "Relationship Manager",
+          "Phone",
+          "Email",
+          "SIC Code",
+          "Industry",
+          "Rating",
+          "Risk Rating",
+          "KYC Status",
+          "Region",
+          "Legal Entity",
+          "Country",
+          "City",
+          "Annual Revenue",
+          "Credit Limit",
+          "Parent Group",
+          "Primary ID Type",
+          "Primary ID Number",
+        ]}
+        data={viewRows}
+        columns={accountColumns}
+        getCellValue={getAccountCellValue}
+        createLabel="Create Client"
+        importLabel="Import Clients"
+        onCreate={startCreate}
+        onImport={() => setImportOpen(true)}
+        onExport={exportClients}
+        renderRows={(visibleRows, orderedColumns) => (
+          <tbody>
+            {visibleRows.map((account) => (
+              <tr
+                key={account.id}
+                className="is-row-interactive"
+                onDoubleClick={() => {
+                  setEditing({ account: { ...account }, mode: "edit" });
+                  setReturnToHome(false);
+                }}
+              >
+                {orderedColumns.map((column) => {
+                  if (column.key === "select") {
+                    return (
+                      <td key={column.key} className="is-row-actions-col">
+                        {renderAccountCell(account, column)}
+                      </td>
+                    );
+                  }
+                  if (column.key === "riskRating") {
+                    const raw = account.riskRating;
+                    return <RiskRatingTd key={column.key} value={raw} />;
+                  }
+                  if (column.key === "status") {
+                    return <AccountStatusTd key={column.key} value={account.status} />;
+                  }
+                  if (column.key === "clientStatus") {
+                    const raw = account.clientStatus;
+                    return <ClientStatusTd key={column.key} value={raw} />;
+                  }
+                  if (column.key === "kycStatus") {
+                    const raw = account.kycStatus;
+                    return <KycStatusTd key={column.key} value={raw} />;
+                  }
+                  if (column.type === "enum" && column.colorable !== false) {
+                    const raw = account[column.key as keyof Account];
+                    const value = raw == null || raw === "" ? null : String(raw);
+                    return <EnumFillTd key={column.key} column={column} value={value} />;
+                  }
+                  return <td key={column.key}>{renderAccountCell(account, column)}</td>;
+                })}
+              </tr>
+            ))}
+          </tbody>
+        )}
+      />
+      {clientModals}
+    </>
   );
 }
 
@@ -4543,6 +4975,25 @@ function getTaskCellValue(task: Task, key: string) {
   if (key === "status") return task.status;
   if (key === "priority") return task.priority;
   return "";
+}
+
+
+const TASK_STATUS_OPTIONS: Task["status"][] = ["Not Started", "Completed", "Deferred"];
+const TASK_PRIORITY_OPTIONS: Task["priority"][] = ["High", "Normal", "Low"];
+
+type TaskImportFieldKey = Exclude<keyof Task, "id">;
+
+const TASK_IMPORT_FIELDS: ImportFieldDef<TaskImportFieldKey>[] = [
+  { key: "subject", label: "Subject", required: true, sample: "Follow up with client" },
+  { key: "dueDate", label: "Due Date", sample: "2026-08-15" },
+  { key: "status", label: "Status", options: TASK_STATUS_OPTIONS, sample: "Not Started" },
+  { key: "priority", label: "Priority", options: TASK_PRIORITY_OPTIONS, sample: "Normal" },
+  { key: "account", label: "Account", sample: "King (Sample)" },
+];
+
+function exportTasks(rows: Task[]) {
+  const stamp = new Date().toISOString().slice(0, 10);
+  exportRecordsCsv(`tasks-export-${stamp}.csv`, TASK_IMPORT_FIELDS, rows);
 }
 
 function TasksWorkspace({
@@ -4604,6 +5055,7 @@ function TasksWorkspace({
           setCreating(true);
           setReturnToHome(false);
         }}
+        onExport={exportTasks}
         renderRows={(visibleRows, orderedColumns) => (
           <tbody>
             {visibleRows.map((task) => (
@@ -4735,6 +5187,7 @@ function getMeetingCellValue(meeting: Meeting, key: string) {
   if (key === "relatedTo") return meeting.relatedTo;
   return "";
 }
+
 
 function MeetingsWorkspace({
   createIntentId = null,
@@ -4921,6 +5374,7 @@ function getCallCellValue(call: Call, key: string) {
   return "";
 }
 
+
 function CallsWorkspace({
   createIntentId = null,
   onCreateHandled,
@@ -5081,10 +5535,118 @@ const LOAN_APPROVAL_AUTHORITY_OPTIONS: Deal["approvalAuthority"][] = [
   "Head Office",
 ];
 
+type DealImportFieldKey = Exclude<keyof Deal, "id" | "accountId" | "probability" | "remarks">;
+
+function buildDealImportFields(config: ProductPipelineConfig): ImportFieldDef<DealImportFieldKey>[] {
+  return [
+    { key: "name", label: `${config.recordLabel} Name`, required: true, sample: `${config.recordLabel} Sample` },
+    {
+      key: "facilityNumber",
+      label: "Facility Number",
+      required: true,
+      sample: `${config.facilityPrefix}-${new Date().getFullYear()}-0001`,
+    },
+    { key: "account", label: "Client", sample: "Everbright Trading Ltd" },
+    { key: "contact", label: "Contact", sample: "Alice Chan" },
+    { key: "owner", label: "Owner", sample: "Jenny" },
+    { key: "businessUnit", label: "Business Unit", options: LOAN_BUSINESS_UNIT_OPTIONS, sample: "Corporate Banking" },
+    { key: "bookingBranch", label: "Booking Branch", sample: "Hong Kong Main" },
+    { key: "productType", label: "Product Type", options: LOAN_PRODUCT_OPTIONS, sample: "Term Loan" },
+    { key: "purpose", label: "Purpose", options: LOAN_PURPOSE_OPTIONS, sample: "Working Capital" },
+    { key: "currency", label: "Currency", options: LOAN_CURRENCY_OPTIONS, sample: "HKD" },
+    { key: "amount", label: "Amount", kind: "number", sample: "10000000" },
+    { key: "approvedAmount", label: "Approved Amount", kind: "number", sample: "10000000" },
+    { key: "outstandingBalance", label: "Outstanding Balance", kind: "number", sample: "7500000" },
+    { key: "tenorMonths", label: "Tenor (Months)", kind: "number", sample: "36" },
+    { key: "repaymentFrequency", label: "Repayment Frequency", options: LOAN_REPAYMENT_OPTIONS, sample: "Quarterly" },
+    { key: "rateType", label: "Rate Type", options: LOAN_RATE_TYPE_OPTIONS, sample: "Floating" },
+    { key: "interestRate", label: "Interest Rate", kind: "number", sample: "4.25" },
+    { key: "benchmarkRate", label: "Benchmark Rate", sample: "LPR 1Y" },
+    { key: "spreadBps", label: "Spread (bps)", kind: "number", sample: "120" },
+    { key: "arrangementFeeBps", label: "Arrangement Fee (bps)", kind: "number", sample: "25" },
+    { key: "commitmentFeeBps", label: "Commitment Fee (bps)", kind: "number", sample: "15" },
+    { key: "utilizationPct", label: "Utilization %", kind: "number", sample: "75" },
+    { key: "collateralType", label: "Collateral Type", options: LOAN_COLLATERAL_OPTIONS, sample: "Property" },
+    { key: "collateralValue", label: "Collateral Value", kind: "number", sample: "15000000" },
+    { key: "ltv", label: "LTV", kind: "number", sample: "65" },
+    { key: "guarantor", label: "Guarantor", sample: "Everbright Holdings" },
+    { key: "riskGrade", label: "Risk Grade", options: LOAN_RISK_OPTIONS, sample: "Medium" },
+    { key: "internalRating", label: "Internal Rating", sample: "BBB" },
+    { key: "facilityStatus", label: "Facility Status", options: LOAN_FACILITY_STATUS_OPTIONS, sample: "Pipeline" },
+    { key: "approvalAuthority", label: "Approval Authority", options: LOAN_APPROVAL_AUTHORITY_OPTIONS, sample: "Credit Committee" },
+    { key: "syndicated", label: "Syndicated", kind: "boolean", sample: "No" },
+    { key: "applicationDate", label: "Application Date", sample: "2026-01-15" },
+    { key: "approvalDate", label: "Approval Date", sample: "2026-02-20" },
+    { key: "drawdownDate", label: "Drawdown Date", sample: "2026-03-01" },
+    { key: "maturityDate", label: "Maturity Date", sample: "2029-03-01" },
+    { key: "closingDate", label: "Closing Date", sample: "2026-03-05" },
+    { key: "nextReviewDate", label: "Next Review Date", sample: "2027-03-01" },
+    { key: "stage", label: "Stage", options: config.stages, sample: config.stages[0] ?? "Identification" },
+  ];
+}
+
+function exportDeals(config: ProductPipelineConfig, rows: Deal[]) {
+  const fields = buildDealImportFields(config);
+  const stamp = new Date().toISOString().slice(0, 10);
+  const slug = config.key.replace(/([A-Z])/g, "-$1").toLowerCase();
+  exportRecordsCsv(`${slug}-export-${stamp}.csv`, fields, rows, (record, key) => {
+    const value = record[key];
+    if (value == null) return "";
+    if (typeof value === "boolean") return value ? "Yes" : "No";
+    return String(value);
+  });
+}
+
+function ImportDealsModal({
+  config,
+  existing,
+  onClose,
+  onImport,
+}: {
+  config: ProductPipelineConfig;
+  existing: Deal[];
+  onClose: () => void;
+  onImport: (created: Deal[], updated: Deal[]) => void;
+}) {
+  const fields = useMemo(() => buildDealImportFields(config), [config]);
+  const slug = config.key.replace(/([A-Z])/g, "-$1").toLowerCase();
+  return (
+    <ImportRecordsModal
+      moduleLabel={config.label}
+      recordLabel={config.recordLabel}
+      fields={fields}
+      matchKey="facilityNumber"
+      matchLabel="Facility Number"
+      existing={existing}
+      getMatchValue={(deal) => deal.facilityNumber}
+      createEmpty={() => createEmptyLoan(config)}
+      makeId={(index) => `${config.key}-import-${Date.now()}-${index}`}
+      templateFilename={`${slug}-import-template.csv`}
+      onClose={onClose}
+      onImport={onImport}
+    />
+  );
+}
+
+
 function buildDealColumns(config: ProductPipelineConfig): ColumnDef[] {
   return [
     { key: "select", header: "", type: "checkbox" },
     { key: "name", header: `${config.recordLabel} Name`, type: "text" },
+    {
+      key: "stage",
+      header: "Stage",
+      type: "enum",
+      enumOptions: [...config.stages],
+      colorGroup: "soft",
+      optionColors: {
+        Identification: 1,
+        Evaluation: 0,
+        Approval: 3,
+        Execution: 4,
+        Completion: 2,
+      },
+    },
     { key: "facilityNumber", header: "Facility Number", type: "text" },
     { key: "account", header: "Client", type: "text" },
     {
@@ -5110,13 +5672,6 @@ function buildDealColumns(config: ProductPipelineConfig): ColumnDef[] {
       colorable: false,
     },
     {
-      key: "stage",
-      header: "Stage",
-      type: "enum",
-      enumOptions: [...config.stages],
-      colorGroup: "vivid",
-    },
-    {
       key: "facilityStatus",
       header: "Facility Status",
       type: "enum",
@@ -5135,8 +5690,7 @@ function buildDealColumns(config: ProductPipelineConfig): ColumnDef[] {
       header: "Risk Grade",
       type: "enum",
       enumOptions: [...LOAN_RISK_OPTIONS],
-      colorGroup: "warm",
-      optionColors: { Low: 0, Medium: 2, High: 4 },
+      colorable: false,
     },
     { key: "internalRating", header: "Internal Rating", type: "text" },
     { key: "owner", header: "Owner", type: "text" },
@@ -5760,10 +6314,20 @@ function DealsWorkspace({
   const kanbanFilters = useMemo(() => buildKanbanDealFilters(config), [config]);
   const { activeTab } = useContext(ModuleViewTabContext);
   const actionsHost = useContext(ModuleViewActionsHostContext);
+  const { filtersOpen } = useContext(ModuleFilterPanelContext);
   const [dealRows, setDealRows] = useState(() => [...getPipelineLoans(moduleKey)]);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Deal | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [returnToHome, setReturnToHome] = useState(false);
+  const facilityCountByLoanId = useMemo(() => {
+    if (moduleKey !== "deals") return null;
+    const counts = new Map<string, number>();
+    for (const facility of loanFacilities) {
+      counts.set(facility.loanId, (counts.get(facility.loanId) ?? 0) + 1);
+    }
+    return counts;
+  }, [moduleKey]);
 
   // The shared store needs the resolved rows, so track them in a ref rather than
   // reading the render-scoped state, which would drop batched updates.
@@ -5775,6 +6339,15 @@ function DealsWorkspace({
     setDealRows(next);
     setPipelineLoans(moduleKey, next);
   }
+
+  useEffect(() => {
+    const rows = [...getPipelineLoans(moduleKey)];
+    committedDealRows.current = rows;
+    setDealRows(rows);
+    setCreating(false);
+    setEditing(null);
+    setImportOpen(false);
+  }, [moduleKey]);
 
   useEffect(() => {
     if (createIntentId == null) return;
@@ -5852,17 +6425,50 @@ function DealsWorkspace({
     );
   }
 
+  const dealModals = importOpen ? (
+    <ImportDealsModal
+      config={config}
+      existing={dealRows}
+      onClose={() => setImportOpen(false)}
+      onImport={(created, updated) => {
+        const sync = (deal: Deal): Deal => ({
+          ...deal,
+          probability: config.stageProbability[deal.stage] ?? deal.probability,
+        });
+        commitDealRows((prev) => {
+          const updatedById = new Map(updated.map((deal) => [deal.id, sync(deal)]));
+          const merged = prev.map((deal) => updatedById.get(deal.id) ?? deal);
+          return [...created.map(sync), ...merged];
+        });
+      }}
+    />
+  ) : null;
+
   if (activeTab === "Kanban") {
     return (
       <>
         {actionsHost
           ? createPortal(
-              <LoanStageBar loans={dealRows} stages={config.stages} ariaLabel={`${config.label} stages`} />,
+              <>
+                <ListCreateButton
+                  createLabel={`Create ${config.recordLabel}`}
+                  importLabel={`Import ${config.label}`}
+                  onCreate={() => {
+                    setEditing(null);
+                    setCreating(true);
+                    setReturnToHome(false);
+                  }}
+                  onImport={() => setImportOpen(true)}
+                />
+                <LoanStageBar loans={dealRows} stages={config.stages} ariaLabel={`${config.label} stages`} />
+              </>,
               actionsHost,
             )
           : null}
-        <div className="record-layout">
-          <FilterPanel title={`Filter ${config.label} by`} filters={kanbanFilters} />
+        <div className={`record-layout ${filtersOpen ? "" : "is-filters-hidden"}`}>
+          {filtersOpen ? (
+            <FilterPanel title={`Filter ${config.label} by`} filters={kanbanFilters} />
+          ) : null}
           <LoanKanbanBoard
             loans={dealRows}
             stages={config.stages}
@@ -5873,54 +6479,80 @@ function DealsWorkspace({
             }}
           />
         </div>
+        {dealModals}
       </>
     );
   }
 
   return (
-    <RecordListShell
-      title={`All ${config.label}`}
-      filters={filters}
-      data={dealRows}
-      columns={columns}
-      getCellValue={getDealCellValue}
-      onCreate={() => {
-        setEditing(null);
-        setCreating(true);
-        setReturnToHome(false);
-      }}
-      renderRows={(visibleRows, orderedColumns) => (
-        <tbody>
-          {visibleRows.map((deal) => (
-            <tr
-              key={deal.id}
-              className="is-row-interactive"
-              onDoubleClick={() => {
-                setCreating(false);
-                setEditing({ ...deal });
-                setReturnToHome(false);
-              }}
-            >
-              {orderedColumns.map((column) => {
-                if (column.key === "select") {
-                  return (
-                    <td key={column.key} className="is-row-actions-col">
-                      {renderDealCell(deal, column)}
-                    </td>
-                  );
-                }
-                if (column.type === "enum" && column.colorable !== false) {
-                  const raw = deal[column.key as keyof Deal];
-                  const value = raw == null || raw === "" ? null : String(raw);
-                  return <EnumFillTd key={column.key} column={column} value={value} />;
-                }
-                return <td key={column.key}>{renderDealCell(deal, column)}</td>;
-              })}
-            </tr>
-          ))}
-        </tbody>
-      )}
-    />
+    <>
+      <RecordListShell
+        title={`All ${config.label}`}
+        filters={filters}
+        data={dealRows}
+        columns={columns}
+        getCellValue={getDealCellValue}
+        createLabel={`Create ${config.recordLabel}`}
+        importLabel={`Import ${config.label}`}
+        onCreate={() => {
+          setEditing(null);
+          setCreating(true);
+          setReturnToHome(false);
+        }}
+        onImport={() => setImportOpen(true)}
+        onExport={(rows) => exportDeals(config, rows)}
+        renderRows={(visibleRows, orderedColumns) => (
+          <tbody>
+            {visibleRows.map((deal) => (
+              <tr
+                key={deal.id}
+                className="is-row-interactive"
+                onDoubleClick={() => {
+                  setCreating(false);
+                  setEditing({ ...deal });
+                  setReturnToHome(false);
+                }}
+              >
+                {orderedColumns.map((column) => {
+                  if (column.key === "select") {
+                    return (
+                      <td key={column.key} className="is-row-actions-col">
+                        {renderDealCell(deal, column)}
+                      </td>
+                    );
+                  }
+                  if (column.key === "name" && facilityCountByLoanId) {
+                    const facilityCount = facilityCountByLoanId.get(deal.id) ?? 0;
+                    return (
+                      <td key={column.key}>
+                        <span className="loan-name-with-count">
+                          {deal.name}
+                          {facilityCount > 0 ? (
+                            <span
+                              className="loan-facility-count"
+                              title={`${facilityCount} Loan Facilit${facilityCount === 1 ? "y" : "ies"}`}
+                            >
+                              {facilityCount}
+                            </span>
+                          ) : null}
+                        </span>
+                      </td>
+                    );
+                  }
+                  if (column.type === "enum" && column.colorable !== false) {
+                    const raw = deal[column.key as keyof Deal];
+                    const value = raw == null || raw === "" ? null : String(raw);
+                    return <EnumFillTd key={column.key} column={column} value={value} />;
+                  }
+                  return <td key={column.key}>{renderDealCell(deal, column)}</td>;
+                })}
+              </tr>
+            ))}
+          </tbody>
+        )}
+      />
+      {dealModals}
+    </>
   );
 }
 
@@ -6114,6 +6746,74 @@ function createEmptyCampaign(): Campaign {
     convertedCount: 0,
     description: "",
   };
+}
+
+type CampaignImportFieldKey = Exclude<keyof Campaign, "id">;
+
+const CAMPAIGN_IMPORT_FIELDS: ImportFieldDef<CampaignImportFieldKey>[] = [
+  { key: "name", label: "Campaign Name", required: true, sample: "SME Working Capital Drive" },
+  { key: "code", label: "Campaign Code", required: true, sample: "CMP-2026-001" },
+  { key: "owner", label: "Campaign Owner", sample: "Jenny" },
+  { key: "type", label: "Type", options: CAMPAIGN_TYPE_OPTIONS, sample: "Client Acquisition" },
+  { key: "status", label: "Status", options: CAMPAIGN_STATUS_OPTIONS, sample: "Planning" },
+  { key: "channel", label: "Channel", options: CAMPAIGN_CHANNEL_OPTIONS, sample: "Email" },
+  {
+    key: "businessUnit",
+    label: "Business Unit",
+    options: LOAN_BUSINESS_UNIT_OPTIONS,
+    sample: "Corporate Banking",
+  },
+  { key: "targetSegment", label: "Target Segment", options: SEGMENT_OPTIONS, sample: "SME" },
+  { key: "targetRegion", label: "Target Region", options: REGION_OPTIONS, sample: "Hong Kong" },
+  {
+    key: "targetProduct",
+    label: "Target Product",
+    options: LOAN_PRODUCT_OPTIONS,
+    sample: "Term Loan",
+  },
+  { key: "currency", label: "Currency", options: LOAN_CURRENCY_OPTIONS, sample: "HKD" },
+  { key: "startDate", label: "Start Date", sample: "2026-08-01" },
+  { key: "endDate", label: "End Date", sample: "2026-09-30" },
+  { key: "expectedRevenue", label: "Expected Revenue", kind: "number", sample: "5000000" },
+  { key: "budgetedCost", label: "Budgeted Cost", kind: "number", sample: "250000" },
+  { key: "actualCost", label: "Actual Cost", kind: "number", sample: "120000" },
+  { key: "expectedResponsePct", label: "Expected Response %", kind: "number", sample: "8" },
+  { key: "numSent", label: "Num Sent", kind: "number", sample: "1200" },
+  { key: "leadsGenerated", label: "Leads Generated", kind: "number", sample: "96" },
+  { key: "convertedCount", label: "Converted", kind: "number", sample: "18" },
+  { key: "description", label: "Description", sample: "Outbound campaign for SME working capital." },
+];
+
+function exportCampaigns(rows: Campaign[]) {
+  const stamp = new Date().toISOString().slice(0, 10);
+  exportRecordsCsv(`event-trigger-export-${stamp}.csv`, CAMPAIGN_IMPORT_FIELDS, rows);
+}
+
+function ImportCampaignsModal({
+  existing,
+  onClose,
+  onImport,
+}: {
+  existing: Campaign[];
+  onClose: () => void;
+  onImport: (created: Campaign[], updated: Campaign[]) => void;
+}) {
+  return (
+    <ImportRecordsModal
+      moduleLabel="Event Trigger"
+      recordLabel="Campaign"
+      fields={CAMPAIGN_IMPORT_FIELDS}
+      matchKey="code"
+      matchLabel="Campaign Code"
+      existing={existing}
+      getMatchValue={(campaign) => campaign.code}
+      createEmpty={createEmptyCampaign}
+      makeId={(index) => `camp-import-${Date.now()}-${index}`}
+      templateFilename="event-trigger-import-template.csv"
+      onClose={onClose}
+      onImport={onImport}
+    />
+  );
 }
 
 type CampaignFormDraft = Omit<
@@ -6494,6 +7194,7 @@ function CampaignWorkspace({
 }) {
   const [rows, setRows] = useState<Campaign[]>(() => [...campaigns]);
   const [editing, setEditing] = useState<{ campaign: Campaign; mode: "create" | "edit" } | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [returnToHome, setReturnToHome] = useState(false);
 
   useEffect(() => {
@@ -6531,6 +7232,11 @@ function CampaignWorkspace({
       }
       return [next, ...prev];
     });
+  }
+
+  function startCreate() {
+    setEditing({ campaign: createEmptyCampaign(), mode: "create" });
+    setReturnToHome(false);
   }
 
   function renderCampaignCell(row: Campaign, column: ColumnDef) {
@@ -6571,47 +7277,63 @@ function CampaignWorkspace({
   }
 
   return (
-    <RecordListShell
-      title="All Campaigns"
-      filters={campaignFilters}
-      data={rows}
-      columns={campaignColumns}
-      getCellValue={getCampaignCellValue}
-      onCreate={() => {
-        setEditing({ campaign: createEmptyCampaign(), mode: "create" });
-        setReturnToHome(false);
-      }}
-      renderRows={(visibleRows, orderedColumns) => (
-        <tbody>
-          {visibleRows.map((row) => (
-            <tr
-              key={row.id}
-              className="is-row-interactive"
-              onDoubleClick={() => {
-                setEditing({ campaign: { ...row }, mode: "edit" });
-                setReturnToHome(false);
-              }}
-            >
-              {orderedColumns.map((column) => {
-                if (column.key === "select") {
-                  return (
-                    <td key={column.key} className="is-row-actions-col">
-                      {renderCampaignCell(row, column)}
-                    </td>
-                  );
-                }
-                if (column.type === "enum" && column.colorable !== false) {
-                  const raw = row[column.key as keyof Campaign];
-                  const value = raw == null || raw === "" ? null : String(raw);
-                  return <EnumFillTd key={column.key} column={column} value={value} />;
-                }
-                return <td key={column.key}>{renderCampaignCell(row, column)}</td>;
-              })}
-            </tr>
-          ))}
-        </tbody>
-      )}
-    />
+    <>
+      <RecordListShell
+        title="All Campaigns"
+        filters={campaignFilters}
+        data={rows}
+        columns={campaignColumns}
+        getCellValue={getCampaignCellValue}
+        createLabel="Create Campaign"
+        importLabel="Import Campaigns"
+        onCreate={startCreate}
+        onImport={() => setImportOpen(true)}
+        onExport={exportCampaigns}
+        renderRows={(visibleRows, orderedColumns) => (
+          <tbody>
+            {visibleRows.map((row) => (
+              <tr
+                key={row.id}
+                className="is-row-interactive"
+                onDoubleClick={() => {
+                  setEditing({ campaign: { ...row }, mode: "edit" });
+                  setReturnToHome(false);
+                }}
+              >
+                {orderedColumns.map((column) => {
+                  if (column.key === "select") {
+                    return (
+                      <td key={column.key} className="is-row-actions-col">
+                        {renderCampaignCell(row, column)}
+                      </td>
+                    );
+                  }
+                  if (column.type === "enum" && column.colorable !== false) {
+                    const raw = row[column.key as keyof Campaign];
+                    const value = raw == null || raw === "" ? null : String(raw);
+                    return <EnumFillTd key={column.key} column={column} value={value} />;
+                  }
+                  return <td key={column.key}>{renderCampaignCell(row, column)}</td>;
+                })}
+              </tr>
+            ))}
+          </tbody>
+        )}
+      />
+      {importOpen ? (
+        <ImportCampaignsModal
+          existing={rows}
+          onClose={() => setImportOpen(false)}
+          onImport={(created, updated) => {
+            setRows((prev) => {
+              const updatedById = new Map(updated.map((campaign) => [campaign.id, campaign]));
+              const merged = prev.map((campaign) => updatedById.get(campaign.id) ?? campaign);
+              return [...created, ...merged];
+            });
+          }}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -7003,9 +7725,58 @@ function UserFormModal({
   );
 }
 
+
+type UserImportFieldKey = Exclude<keyof DemoUser, "id" | "password" | "lastLogin">;
+
+const USER_IMPORT_FIELDS: ImportFieldDef<UserImportFieldKey>[] = [
+  { key: "displayName", label: "Display Name", required: true, sample: "Alice Chan" },
+  { key: "username", label: "Username", required: true, sample: "alice.chan" },
+  { key: "status", label: "Status", options: USER_STATUS_OPTIONS, sample: "Active" },
+  { key: "role", label: "Role", options: USER_ROLE_OPTIONS, sample: "RM" },
+  { key: "profile", label: "Profile", options: USER_PROFILE_OPTIONS, sample: "Standard" },
+  { key: "bu", label: "BU", options: USER_BU_OPTIONS, sample: "CBA-A-A1" },
+  { key: "department", label: "Department", options: USER_DEPARTMENT_OPTIONS, sample: "Corporate Banking" },
+  { key: "manager", label: "Manager", sample: "Jenny" },
+  { key: "outlookEmail", label: "Outlook", sample: "alice.chan@example.com" },
+  { key: "mobile", label: "Mobile", sample: "+852 9000 2002" },
+];
+
+function exportUsers(rows: DemoUser[]) {
+  const stamp = new Date().toISOString().slice(0, 10);
+  exportRecordsCsv(`users-export-${stamp}.csv`, USER_IMPORT_FIELDS, rows);
+}
+
+function ImportUsersModal({
+  existing,
+  onClose,
+  onImport,
+}: {
+  existing: DemoUser[];
+  onClose: () => void;
+  onImport: (created: DemoUser[], updated: DemoUser[]) => void;
+}) {
+  return (
+    <ImportRecordsModal
+      moduleLabel="Users"
+      recordLabel="User"
+      fields={USER_IMPORT_FIELDS}
+      matchKey="username"
+      matchLabel="Username"
+      existing={existing}
+      getMatchValue={(user) => user.username}
+      createEmpty={createEmptyUser}
+      makeId={(index) => String(200000 + index)}
+      templateFilename="users-import-template.csv"
+      onClose={onClose}
+      onImport={onImport}
+    />
+  );
+}
+
 function UsersWorkspace({ onBack }: { onBack: () => void }) {
   const [rows, setRows] = useState<DemoUser[]>(() => demoUsers.map((user) => ({ ...user })));
   const [editing, setEditing] = useState<{ user: DemoUser; mode: "create" | "edit" } | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   function handleSave(next: DemoUser) {
     setRows((prev) => {
@@ -7075,7 +7846,11 @@ function UsersWorkspace({ onBack }: { onBack: () => void }) {
         data={rows}
         columns={userColumns}
         getCellValue={getUserCellValue}
+        createLabel="Create User"
+        importLabel="Import Users"
         onCreate={() => setEditing({ user: createEmptyUser(), mode: "create" })}
+        onImport={() => setImportOpen(true)}
+        onExport={exportUsers}
         renderRows={(visibleRows, orderedColumns) => (
           <tbody>
             {visibleRows.map((user) => (
@@ -7104,6 +7879,19 @@ function UsersWorkspace({ onBack }: { onBack: () => void }) {
           </tbody>
         )}
       />
+      {importOpen ? (
+        <ImportUsersModal
+          existing={rows}
+          onClose={() => setImportOpen(false)}
+          onImport={(created, updated) => {
+            setRows((prev) => {
+              const updatedById = new Map(updated.map((user) => [user.id, user]));
+              const merged = prev.map((user) => updatedById.get(user.id) ?? user);
+              return [...created, ...merged];
+            });
+          }}
+        />
+      ) : null}
       {editing ? (
         <UserFormModal
           user={editing.user}
@@ -7328,6 +8116,69 @@ function createEmptyContact(): Contact {
     lastContacted: "",
     notes: "",
   };
+}
+
+
+type ContactImportFieldKey = Exclude<keyof Contact, "id" | "accountId">;
+
+const CONTACT_IMPORT_FIELDS: ImportFieldDef<ContactImportFieldKey>[] = [
+  { key: "name", label: "Contact Name", required: true, sample: "Art Venere" },
+  { key: "title", label: "Job Title", sample: "CFO" },
+  { key: "account", label: "Client", sample: "King (Sample)" },
+  { key: "status", label: "Status", options: CONTACT_STATUS_OPTIONS, sample: "Active" },
+  { key: "role", label: "Role", options: CONTACT_ROLE_OPTIONS, sample: "Primary Contact" },
+  { key: "email", label: "Email", required: true, sample: "art.venere@example.com" },
+  { key: "phone", label: "Phone", sample: "+852 2500 1001" },
+  { key: "mobile", label: "Mobile", sample: "+852 9000 1001" },
+  { key: "department", label: "Department", sample: "Finance" },
+  {
+    key: "preferredChannel",
+    label: "Preferred Channel",
+    options: CONTACT_CHANNEL_OPTIONS,
+    sample: "Email",
+  },
+  { key: "region", label: "Region", options: REGION_OPTIONS, sample: "Hong Kong" },
+  { key: "decisionMaker", label: "Decision Maker", kind: "boolean", sample: "Yes" },
+  { key: "owner", label: "Owner", sample: "Jenny" },
+  { key: "lastContacted", label: "Last Contacted", sample: "2026-07-15" },
+  { key: "notes", label: "Notes", sample: "Key contact for credit reviews." },
+];
+
+function exportContacts(rows: Contact[]) {
+  const stamp = new Date().toISOString().slice(0, 10);
+  exportRecordsCsv(`contacts-export-${stamp}.csv`, CONTACT_IMPORT_FIELDS, rows, (record, key) => {
+    const value = record[key];
+    if (value == null) return "";
+    if (typeof value === "boolean") return value ? "Yes" : "No";
+    return String(value);
+  });
+}
+
+function ImportContactsModal({
+  existing,
+  onClose,
+  onImport,
+}: {
+  existing: Contact[];
+  onClose: () => void;
+  onImport: (created: Contact[], updated: Contact[]) => void;
+}) {
+  return (
+    <ImportRecordsModal
+      moduleLabel="Contacts"
+      recordLabel="Contact"
+      fields={CONTACT_IMPORT_FIELDS}
+      matchKey="email"
+      matchLabel="Email"
+      existing={existing}
+      getMatchValue={(contact) => contact.email}
+      createEmpty={createEmptyContact}
+      makeId={(index) => `con-import-${Date.now()}-${index}`}
+      templateFilename="contacts-import-template.csv"
+      onClose={onClose}
+      onImport={onImport}
+    />
+  );
 }
 
 type ContactFormDraft = Omit<Contact, "status" | "role" | "preferredChannel" | "region"> & {
@@ -7648,6 +8499,7 @@ function ContactsWorkspace({
 }) {
   const [rows, setRows] = useState<Contact[]>(() => [...contacts]);
   const [editing, setEditing] = useState<{ contact: Contact; mode: "create" | "edit" } | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [returnToHome, setReturnToHome] = useState(false);
 
   useEffect(() => {
@@ -7687,6 +8539,11 @@ function ContactsWorkspace({
     });
   }
 
+  function startCreate() {
+    setEditing({ contact: createEmptyContact(), mode: "create" });
+    setReturnToHome(false);
+  }
+
   function renderContactCell(row: Contact, column: ColumnDef) {
     if (column.key === "select") {
       return (
@@ -7711,6 +8568,33 @@ function ContactsWorkspace({
     return value == null || value === "" ? "" : String(value);
   }
 
+  const contactModals = (
+    <>
+      {importOpen ? (
+        <ImportContactsModal
+          existing={rows}
+          onClose={() => setImportOpen(false)}
+          onImport={(created, updated) => {
+            setRows((prev) => {
+              const updatedById = new Map(updated.map((contact) => [contact.id, contact]));
+              const merged = prev.map((contact) => updatedById.get(contact.id) ?? contact);
+              return [...created, ...merged];
+            });
+          }}
+        />
+      ) : null}
+      {editing ? (
+        <ContactFormModal
+          key={editing.mode === "create" ? "create-contact" : editing.contact.id}
+          contact={editing.contact}
+          mode={editing.mode}
+          onClose={dismissForm}
+          onSave={handleSave}
+        />
+      ) : null}
+    </>
+  );
+
   return (
     <>
       <RecordListShell
@@ -7719,10 +8603,11 @@ function ContactsWorkspace({
         data={rows}
         columns={contactColumns}
         getCellValue={getContactCellValue}
-        onCreate={() => {
-          setEditing({ contact: createEmptyContact(), mode: "create" });
-          setReturnToHome(false);
-        }}
+        createLabel="Create Contact"
+        importLabel="Import Contacts"
+        onCreate={startCreate}
+        onImport={() => setImportOpen(true)}
+        onExport={exportContacts}
         renderRows={(visibleRows, orderedColumns) => (
           <tbody>
             {visibleRows.map((row) => (
@@ -7754,15 +8639,7 @@ function ContactsWorkspace({
           </tbody>
         )}
       />
-      {editing ? (
-        <ContactFormModal
-          key={editing.mode === "create" ? "create-contact" : editing.contact.id}
-          contact={editing.contact}
-          mode={editing.mode}
-          onClose={dismissForm}
-          onSave={handleSave}
-        />
-      ) : null}
+      {contactModals}
     </>
   );
 }
