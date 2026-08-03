@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronRight, MoreHorizontal, X } from "lucide-react";
+import { Check, ChevronRight, Minus, MoreHorizontal, Plus, X } from "lucide-react";
 import {
   createContext,
   useContext,
@@ -579,13 +579,20 @@ export function RowSelectCell({
   context,
   onEdit,
   onDelete,
+  expand,
 }: {
   context: RowActionContext;
   onEdit?: () => void;
   onDelete?: () => void;
+  expand?: {
+    visible: boolean;
+    expanded: boolean;
+    onToggle: () => void;
+  };
 }) {
   const selection = useRowSelection();
   const checked = selection?.isSelected(context.id) ?? false;
+  const showExpandSlot = Boolean(expand);
 
   return (
     <div className="row-lead-controls" onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
@@ -597,11 +604,29 @@ export function RowSelectCell({
         checked={checked}
         onChange={(event) => selection?.setSelected(context.id, event.target.checked)}
       />
+      {showExpandSlot ? (
+        expand?.visible ? (
+          <button
+            type="button"
+            className={`row-expand-trigger ${expand.expanded ? "is-expanded" : ""}`}
+            aria-label={expand.expanded ? `Collapse facilities for ${context.label}` : `Expand facilities for ${context.label}`}
+            aria-expanded={expand.expanded}
+            onClick={(event) => {
+              event.stopPropagation();
+              expand.onToggle();
+            }}
+          >
+            {expand.expanded ? <Minus size={10} /> : <Plus size={10} />}
+          </button>
+        ) : (
+          <span className="row-expand-spacer" aria-hidden />
+        )
+      ) : null}
     </div>
   );
 }
 
-export function HeaderSelectCheckbox() {
+export function HeaderSelectCheckbox({ showExpandSlot = false }: { showExpandSlot?: boolean }) {
   const selection = useRowSelection();
   const ref = useRef<HTMLInputElement>(null);
   const allSelected = selection?.allPageSelected ?? false;
@@ -624,6 +649,7 @@ export function HeaderSelectCheckbox() {
         checked={allSelected}
         onChange={(event) => selection?.setPageSelected(event.target.checked)}
       />
+      {showExpandSlot ? <span className="row-expand-spacer" aria-hidden /> : null}
     </div>
   );
 }

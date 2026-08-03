@@ -262,7 +262,7 @@ function endOfDay(ts: number) {
   return ts + 24 * 60 * 60 * 1000 - 1;
 }
 
-function matchesFilter(raw: string | number, type: FieldType, filter: ColumnFilter) {
+export function matchesFieldFilter(raw: string | number, type: FieldType, filter: ColumnFilter) {
   const text = String(raw ?? "");
 
   if (filter.kind === "text") {
@@ -366,7 +366,7 @@ export function applyColumnSortFilter<T>(
       if (!isColumnFilterable(column)) return true;
       const filter = filters[column.key];
       if (!hasActiveFilter(filter)) return true;
-      return matchesFilter(getCellValue(row, column.key), column.type, filter!);
+      return matchesFieldFilter(getCellValue(row, column.key), column.type, filter!);
     }),
   );
 
