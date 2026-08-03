@@ -30,15 +30,15 @@ const VIVID_COLORS: OptionColor[] = [
   { bg: "#EF4444", fg: "#ffffff" },
 ];
 
-/** Soft pastels with dark text. */
+/** Soft Stage-style pastels with dark text. */
 const SOFT_COLORS: OptionColor[] = [
-  { bg: "#DCF7E7", fg: "#157244" },
-  { bg: "#DDE8FF", fg: "#1D4ED8" },
-  { bg: "#FFF0D9", fg: "#9B5B00" },
-  { bg: "#EBE4FF", fg: "#5B21B6" },
-  { bg: "#FFE4EA", fg: "#BE123C" },
+  { bg: "#F7DCE3", fg: "#A31D31" },
+  { bg: "#D5F0EA", fg: "#1A7A68" },
+  { bg: "#DDE7FC", fg: "#2F5CF0" },
+  { bg: "#F5E6CF", fg: "#9A6B20" },
+  { bg: "#E9E0F8", fg: "#6B3DB5" },
   { bg: "#D9F3F1", fg: "#0F766E" },
-  { bg: "#E8EEF8", fg: "#334155" },
+  { bg: "#ECEEF2", fg: "#5F6775" },
   { bg: "#FCE7F3", fg: "#9D174D" },
   { bg: "#FEF3C7", fg: "#92400E" },
   { bg: "#E0E7FF", fg: "#3730A3" },
