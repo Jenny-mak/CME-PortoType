@@ -5,6 +5,7 @@ import type { Deal } from "./types";
 export type PipelineLoanSnapshot = Record<ProductPipelineModuleKey, Deal[]>;
 
 const MODULE_KEYS = Object.keys(productPipelineData) as ProductPipelineModuleKey[];
+const STORAGE_KEY = "crm-demo-pipeline-loans";
 
 function cloneSnapshot(): PipelineLoanSnapshot {
   return MODULE_KEYS.reduce((acc, key) => {
@@ -13,7 +14,34 @@ function cloneSnapshot(): PipelineLoanSnapshot {
   }, {} as PipelineLoanSnapshot);
 }
 
-let snapshot = cloneSnapshot();
+function loadPersistedSnapshot(): PipelineLoanSnapshot | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PipelineLoanSnapshot;
+    if (!parsed || typeof parsed !== "object") return null;
+    for (const key of MODULE_KEYS) {
+      if (!Array.isArray(parsed[key])) return null;
+    }
+    return MODULE_KEYS.reduce((acc, key) => {
+      acc[key] = parsed[key].map((deal) => ({ ...deal }));
+      return acc;
+    }, {} as PipelineLoanSnapshot);
+  } catch {
+    return null;
+  }
+}
+
+function savePersistedSnapshot(next: PipelineLoanSnapshot) {
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // Ignore storage errors so the CRM keeps working without persistence.
+  }
+}
+
+let snapshot = loadPersistedSnapshot() ?? cloneSnapshot();
 const listeners = new Set<() => void>();
 
 function emit() {
@@ -29,6 +57,7 @@ export function setPipelineLoans(moduleKey: ProductPipelineModuleKey, loans: Dea
     ...snapshot,
     [moduleKey]: loans.map((deal) => ({ ...deal })),
   };
+  savePersistedSnapshot(snapshot);
   emit();
 }
 

@@ -10,11 +10,12 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  CircleAlert,
   CircleDollarSign,
   CircleHelp,
+  ClipboardClock,
   ClipboardList,
   Clock3,
+  PanelLeftClose,
   CreditCard,
   Download,
   Eye,
@@ -51,6 +52,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type FormEvent,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -119,7 +121,7 @@ import {
   applyRelatedModuleFilters,
   type RelatedModuleRule,
 } from "@/lib/related-module-filters";
-import { exportRecordsCsv, type ImportFieldDef } from "@/lib/csv-import";
+import { downloadCsv, exportRecordsCsv, type ImportFieldDef } from "@/lib/csv-import";
 import { resolveOptionColor } from "@/lib/option-colors";
 import {
   applyColumnSortFilter,
@@ -182,7 +184,7 @@ import {
 
 type AppearanceMode = "day" | "night" | "auto";
 type ThemeTone = "dark" | "lite";
-type WorkspaceView = "modules" | "admin" | "users";
+type WorkspaceView = "modules" | "admin" | "users" | "audit";
 type OpenRecordIntent = {
   recordId: string;
   id: number;
@@ -661,7 +663,9 @@ export default function CRMWorkspace() {
       ? "Setup"
       : workspaceView === "users"
         ? "Users"
-        : activeModule === "home"
+        : workspaceView === "audit"
+          ? "Audit History"
+          : activeModule === "home"
           ? "Home"
           : activeModule === "reports"
             ? "Reports"
@@ -824,6 +828,13 @@ export default function CRMWorkspace() {
         width={sidebarWidth}
         onWidthChange={setSidebarWidth}
         onChange={navigateFromSidebar}
+        onOpenAudit={() => {
+          setCreateIntent(null);
+          setRecordIntent(null);
+          setHomeExpandedPanel(null);
+          setWorkspaceView("audit");
+        }}
+        auditActive={workspaceView === "audit"}
         onToggle={() => setSidebarExpanded((value) => !value)}
       />
       <section className="main">
@@ -848,9 +859,12 @@ export default function CRMWorkspace() {
               onQueryChange={setAdminQuery}
               onShowWorkflow={() => setShowWorkflowModal(true)}
               onOpenUsers={() => setWorkspaceView("users")}
+              onOpenAudit={() => setWorkspaceView("audit")}
             />
           ) : workspaceView === "users" ? (
             <UsersWorkspace onBack={() => setWorkspaceView("admin")} />
+          ) : workspaceView === "audit" ? (
+            <AuditHistoryWorkspace />
           ) : (
             <ModuleViewActionsProvider>
               {activeModule !== "home" && activeModule !== "reports" ? (
@@ -1652,9 +1666,13 @@ function Sidebar({
   width,
   onWidthChange,
   onChange,
+  onOpenAudit,
+  auditActive,
   onToggle,
 }: {
   activeModule: ModuleKey;
+  onOpenAudit: () => void;
+  auditActive: boolean;
   expanded: boolean;
   width: number;
   onWidthChange: (width: number) => void;
@@ -1760,7 +1778,6 @@ function Sidebar({
               <ReportsIcon size={22} />
               <span>Reports</span>
             </button>
-
             <div className="nav-section">
               <div className="modules-heading">
                 <ModulesIcon size={26} />
@@ -1784,6 +1801,10 @@ function Sidebar({
                 />
               ))}
             </div>
+            <button className={`nav-item ${auditActive ? "active" : ""}`} onClick={onOpenAudit} type="button">
+              <ClipboardClock size={18} strokeWidth={1.7} />
+              <span>Audit History</span>
+            </button>
           </div>
 
           <div
@@ -1880,7 +1901,12 @@ function Sidebar({
               </div>
             )}
           </div>
+          <button className={`rail-item ${auditActive ? "active" : ""}`} onClick={onOpenAudit} type="button">
+            <ClipboardClock size={20} strokeWidth={1.7} />
+            <span>Audit History</span>
+          </button>
         </>
+
       )}
     </aside>
   );
@@ -1914,6 +1940,7 @@ function Topbar({
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [createQuery, setCreateQuery] = useState("");
   const [dismissedSignatures, setDismissedSignatures] = useState<string[]>([]);
+  const [selectedSignatures, setSelectedSignatures] = useState<string[]>([]);
   const [greetingDate, setGreetingDate] = useState(() => formatHomeDate());
   const [greetingTime, setGreetingTime] = useState(() => formatHomeTime());
   const profileRef = useRef<HTMLDivElement | null>(null);
@@ -1963,6 +1990,20 @@ function Topbar({
   const filteredCreateOptions = createRecordOptions.filter((option) =>
     option.label.toLowerCase().includes(createQuery.trim().toLowerCase()),
   );
+  const notificationsByModule = useMemo(() => {
+    const grouped = new Map<string, AppNotification[]>();
+    for (const notification of notifications) {
+      const items = grouped.get(notification.module) ?? [];
+      items.push(notification);
+      grouped.set(notification.module, items);
+    }
+    return Array.from(grouped.entries()).map(([module, items]) => ({
+      module,
+      label: modules.find((item) => item.key === module)?.label ?? module,
+      items,
+    }));
+  }, [notifications]);
+  const [expandedNotificationModules, setExpandedNotificationModules] = useState<string[]>([]);
 
   return (
     <header className="topbar">
@@ -2047,58 +2088,82 @@ function Topbar({
           {notificationsOpen && (
             <div className="notifications-panel">
               <div className="notifications-panel-header">
-                <div>
-                  <div className="notifications-panel-title">Notifications</div>
-                  <p className="notifications-panel-subtitle">
-                    Stale loans and overdue reviews
-                  </p>
+                <div className="notifications-heading">
+                  <div className="notifications-panel-title"><Bell size={15} /> Notification <span>{notifications.length}</span></div>
                 </div>
-                {notifications.length > 0 ? (
-                  <button
-                    type="button"
-                    className="notifications-clear"
-                    onClick={() =>
-                      setDismissedSignatures((prev) => [
-                        ...new Set([...prev, ...notifications.map((item) => item.signature)]),
-                      ])
-                    }
-                  >
-                    Clear all
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  className="notifications-panel-close"
+                  aria-label="Close notifications"
+                  title="Close notifications"
+                  onClick={() => setNotificationsOpen(false)}
+                >
+                  <span className="notifications-panel-collapse-icon" aria-hidden="true" />
+                </button>
               </div>
               <div className="notifications-list">
-                {notifications.length === 0 ? (
-                  <p className="notifications-empty">You are all caught up.</p>
-                ) : (
-                  notifications.map((notification) => (
-                    <button
-                      key={notification.id}
-                      type="button"
-                      className={`notifications-item severity-${notification.severity}`}
-                      onClick={() => {
-                        onOpenNotification(notification);
-                        setDismissedSignatures((prev) =>
-                          prev.includes(notification.signature)
-                            ? prev
-                            : [...prev, notification.signature],
-                        );
-                        setNotificationsOpen(false);
-                      }}
-                    >
-                      <span className="notifications-item-icon" aria-hidden>
-                        {notification.type === "stale_loan" ? (
-                          <Clock3 size={15} />
-                        ) : (
-                          <CircleAlert size={15} />
-                        )}
-                      </span>
-                      <span className="notifications-item-copy">
-                        <strong>{notification.title}</strong>
-                        <span>{notification.body}</span>
-                      </span>
-                    </button>
-                  ))
+                {notifications.length === 0 ? <p className="notifications-empty">You are all caught up.</p> : (
+                  notificationsByModule.map((group) => {
+                    const expanded = expandedNotificationModules.includes(group.module);
+                    return (
+                      <section className="notification-module-group" key={group.module}>
+                        <button
+                          type="button"
+                          className="notification-module-header"
+                          aria-expanded={expanded}
+                          onClick={() => setExpandedNotificationModules((prev) => expanded ? prev.filter((item) => item !== group.module) : [...prev, group.module])}
+                        >
+                          <span className="notification-module-heading">
+                            <span className="notification-module-icon">{moduleIcons[group.module as Exclude<ModuleKey, "home" | "reports">]}</span>
+                            <strong>{group.label}</strong>
+                            <span className="notification-module-count">{group.items.length}</span>
+                          </span>
+                          <span className="notification-module-actions">
+                            <ChevronDown size={15} className={expanded ? "is-expanded" : ""} />
+                          </span>
+                        </button>
+                        {expanded && selectedSignatures.some((signature) => group.items.some((item) => item.signature === signature)) ? (
+                          <div className="notifications-bulk-actions">
+                            <button
+                              type="button"
+                              className={`notification-check ${group.items.every((item) => selectedSignatures.includes(item.signature)) ? "is-checked" : ""}`}
+                              aria-label={`Select all ${group.label} notifications`}
+                              onClick={() => setSelectedSignatures((prev) => group.items.every((item) => prev.includes(item.signature))
+                                ? prev.filter((signature) => !group.items.some((item) => item.signature === signature))
+                                : [...new Set([...prev, ...group.items.map((item) => item.signature)])])}
+                            >
+                              {group.items.every((item) => selectedSignatures.includes(item.signature)) ? <Check size={14} /> : null}
+                            </button>
+                            <span>All</span>
+                            <button
+                              type="button"
+                              className="notifications-bulk-dismiss"
+                              onClick={() => {
+                                setDismissedSignatures((prev) => [...new Set([...prev, ...group.items.filter((item) => selectedSignatures.includes(item.signature)).map((item) => item.signature)])]);
+                                setSelectedSignatures((prev) => prev.filter((signature) => !group.items.some((item) => item.signature === signature)));
+                              }}
+                            >
+                              Dismiss
+                            </button>
+                          </div>
+                        ) : null}
+                        {expanded ? group.items.map((notification) => {
+                          const selected = selectedSignatures.includes(notification.signature);
+                          const openNotification = () => {
+                            onOpenNotification(notification);
+                            setNotificationsOpen(false);
+                          };
+                          return <div key={notification.id} className={`notifications-item severity-${notification.severity} ${selected ? "is-selected" : ""}`}>
+                            <button type="button" className={`notification-check ${selected ? "is-checked" : ""}`} aria-label={`Select ${notification.title}`} onClick={() => setSelectedSignatures((prev) => selected ? prev.filter((item) => item !== notification.signature) : [...prev, notification.signature])}>{selected ? <Check size={16} /> : null}</button>
+                            <button type="button" className="notifications-item-copy" onClick={openNotification} onDoubleClick={openNotification}>
+                              <strong>{notification.title}</strong><span>{notification.body}</span>
+                            </button>
+                            <button type="button" className="notification-dismiss" onClick={() => setDismissedSignatures((prev) => [...prev, notification.signature])}>Dismiss</button>
+                          </div>;
+                        }) : null}
+                      </section>
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -3088,11 +3153,15 @@ function LeadsWorkspace({
   onRecordHandled?: () => void;
   onReturnHome?: () => void;
 }) {
-  const [rows, setRows] = useState(() => [...leads]);
+  const [rows, setRows] = useState(() => loadPersistedRecords<Lead>(LEADS_STORAGE_KEY) ?? [...leads]);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Lead | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [returnToHome, setReturnToHome] = useState(false);
+
+  useEffect(() => {
+    savePersistedRecords(LEADS_STORAGE_KEY, rows);
+  }, [rows]);
 
   useEffect(() => {
     if (createIntentId == null) return;
@@ -3282,14 +3351,18 @@ function LeadDetail({
   detailTab: "overview" | "timeline";
   setDetailTab: (tab: "overview" | "timeline") => void;
 }) {
+  const [relatedListVisible, setRelatedListVisible] = useState(true);
+
   return (
-    <section className="detail-shell">
-      <aside className="related-list">
-        <strong>Related List</strong>
+    <section className={`detail-shell ${relatedListVisible ? "" : "related-list-collapsed"}`}>
+      {relatedListVisible ? (
+        <aside className="related-list">
+          <strong>Related List</strong>
         {["Notes 2", "Attachments 2", "Open Activities", "Closed Activities", "Invited Meetings", "Emails", "Campaigns", "Social"].map((item) => (
           <a key={item}>{item}</a>
-        ))}
-      </aside>
+          ))}
+        </aside>
+      ) : null}
       <div className="detail-content">
         <div className="page-header" style={{ marginBottom: 14 }}>
           <div>
@@ -3302,13 +3375,25 @@ function LeadDetail({
             <button className="secondary-button">Edit</button>
           </div>
         </div>
-        <div className="pill-tabs" style={{ marginBottom: 14 }}>
-          <button className={`pill ${detailTab === "overview" ? "active" : ""}`} onClick={() => setDetailTab("overview")}>
-            Overview
+        <div className="detail-view-tabs">
+          <button
+            type="button"
+            className="related-list-toggle"
+            aria-label={relatedListVisible ? "Hide related list" : "Show related list"}
+            title={relatedListVisible ? "Hide related list" : "Show related list"}
+            aria-pressed={relatedListVisible}
+            onClick={() => setRelatedListVisible((visible) => !visible)}
+          >
+            <PanelLeftClose size={26} />
           </button>
-          <button className={`pill ${detailTab === "timeline" ? "active" : ""}`} onClick={() => setDetailTab("timeline")}>
-            Timeline
-          </button>
+          <div className="pill-tabs">
+            <button className={`pill ${detailTab === "overview" ? "active" : ""}`} onClick={() => setDetailTab("overview")}>
+              Overview
+            </button>
+            <button className={`pill ${detailTab === "timeline" ? "active" : ""}`} onClick={() => setDetailTab("timeline")}>
+              Timeline
+            </button>
+          </div>
         </div>
         {detailTab === "overview" ? <LeadOverview /> : <LeadTimeline />}
       </div>
@@ -4193,11 +4278,11 @@ function RecordListShell<T extends { id: string }>({
           onCreate={onCreate}
           onImport={onImport}
         />
-      ) : (
+      ) : onCreate ? (
         <button className="list-new-button" type="button" onClick={onCreate}>
           + New
         </button>
-      )}
+      ) : null}
       {onExport ? (
         <button
           className="secondary-button"
@@ -4891,7 +4976,6 @@ function ChoiceField<T extends string>({
               aria-haspopup="listbox"
               aria-expanded={open}
               aria-label={ariaLabel}
-              aria-invalid={invalid}
               onClick={() => setOpen((prev) => !prev)}
             >
               {value ? (
@@ -5204,6 +5288,55 @@ function MultiChoiceField<T extends string>({
   );
 }
 
+type ClientRelatedCard = {
+  key: string;
+  label: string;
+  columns: string[];
+  records: Array<{ id: string; values: string[] }>;
+};
+
+function buildClientRelatedCards(clientName: string): ClientRelatedCard[] {
+  const normalized = clientName.trim().toLowerCase();
+  const loans = getPipelineLoansSnapshot().deals.filter(
+    (item) => item.account.trim().toLowerCase() === normalized,
+  );
+  const meetingsForClient = meetings.filter((item) => item.relatedTo.trim().toLowerCase() === normalized);
+  const tasksForClient = tasks.filter((item) => item.account.trim().toLowerCase() === normalized);
+
+  const dealColumns = ["Loan Name", "Stage", "Facility Number", "Client", "Business Unit", "Product Type", "Amount", "Currency", "Facility Status"];
+  const dealRecords = (items: Deal[]) => items.map((item) => ({
+    id: item.id,
+    values: [item.name, item.stage, item.facilityNumber, item.account, item.businessUnit, item.productType, item.amount, item.currency, item.facilityStatus],
+  }));
+  const dealCard = (key: string, label: string, items: Deal[]): ClientRelatedCard => ({
+    key,
+    label,
+    columns: dealColumns.map((column) => column === "Loan Name" ? `${label} Name` : column),
+    records: dealRecords(items),
+  });
+
+  return [
+    dealCard("Loan", "Loan", loans),
+    dealCard("GTS", "GTS", loans.filter((item) => item.businessUnit === "Trade Finance")),
+    dealCard("GPS", "GPS", loans.filter((item) => ["Revolving Credit", "Overdraft"].includes(item.productType))),
+    dealCard("SF", "SF", loans.filter((item) => /green|sustain/i.test(item.name))),
+    dealCard("GM", "GM", loans.filter((item) => /fx|swap|hedge|note/i.test(item.name))),
+    dealCard("Life Insurance", "Life Insurance", loans.filter((item) => /insurance|protection/i.test(item.name))),
+    {
+      key: "Meeting",
+      label: "Meeting",
+      columns: ["Title", "From", "To", "Related To"],
+      records: meetingsForClient.map((item) => ({ id: item.id, values: [item.title, item.from, item.to, item.relatedTo] })),
+    },
+    {
+      key: "Task",
+      label: "Task",
+      columns: ["Subject", "Due Date", "Status", "Priority"],
+      records: tasksForClient.map((item) => ({ id: item.id, values: [item.subject, item.dueDate, item.status, item.priority] })),
+    },
+  ];
+}
+
 function ClientFormPage({
   account,
   mode,
@@ -5215,438 +5348,563 @@ function ClientFormPage({
   onClose: () => void;
   onSave: (next: Account) => void;
 }) {
-  const [draft, setDraft] = useState<ClientFormDraft>(() => ({
-    ...(mode === "create" ? { ...account, status: null, clientStatus: null } : account),
-    productsOfInterest: [...(account.productsOfInterest ?? [])],
-    preferredChannels: [...(account.preferredChannels ?? [])],
-  }));
+  const initialDraft = useMemo<ClientFormDraft>(
+    () => ({
+      ...(mode === "create" ? { ...account, status: null, clientStatus: null } : account),
+      productsOfInterest: [...(account.productsOfInterest ?? [])],
+      preferredChannels: [...(account.preferredChannels ?? [])],
+    }),
+    [account, mode],
+  );
+  const [draft, setDraft] = useState<ClientFormDraft>(() => initialDraft);
   const [attempted, setAttempted] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [relatedListVisible, setRelatedListVisible] = useState(true);
+  const [detailTab, setDetailTab] = useState<"overview" | "timeline">("overview");
+  const [refreshingRelatedCard, setRefreshingRelatedCard] = useState<string | null>(null);
+  const [activeRelatedCard, setActiveRelatedCard] = useState<string | null>(null);
+  const [creatingRelated, setCreatingRelated] = useState<ClientRelatedCard | null>(null);
 
   const companyNameError = attempted && !draft.companyName.trim();
+  const emailValue = draft.email.trim();
+  const emailError = attempted && emailValue !== "" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue);
   const statusError = attempted && !draft.status;
   const clientStatusError = attempted && !draft.clientStatus;
+  const isDirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(initialDraft), [draft, initialDraft]);
+  const relatedCards = buildClientRelatedCards(draft.companyName || account.companyName);
+  const formStateClass = isDirty ? "is-editing" : "is-pristine";
+  const recordTitle = mode === "create" ? "Create Client" : `Client. ${account.companyName.trim() || "Company Name"}`;
 
   function update<K extends keyof ClientFormDraft>(key: K, value: ClientFormDraft[K]) {
     setDraft((prev) => ({ ...prev, [key]: value }));
   }
 
-  function handleSave() {
+  function scrollToRelatedCard(key: string) {
+    setDetailTab("overview");
+    setActiveRelatedCard(key);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        document.getElementById(`client-related-card-${key}`)?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
+    });
+  }
+
+  function refreshRelatedCard(key: string) {
+    if (refreshingRelatedCard) return;
+    setRefreshingRelatedCard(key);
+    window.setTimeout(() => setRefreshingRelatedCard(null), 800);
+  }
+
+  function exportRelatedCard(card: ClientRelatedCard) {
+    const filename = `${card.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-records.csv`;
+    downloadCsv(filename, [card.columns, ...card.records.map((record) => record.values)]);
+  }
+
+  function openRelatedCreate(key: string) {
+    const card = relatedCards.find((item) => item.key === key);
+    if (card) setCreatingRelated(card);
+  }
+
+  function saveRelatedRecord(values: Record<string, string>) {
+    if (!creatingRelated) return;
+    const client = (draft.companyName || account.companyName).trim();
+    if (creatingRelated.key === "Task") {
+      const next: Task = {
+        id: `task-${Date.now()}`,
+        subject: values.subject.trim() || "Untitled Task",
+        dueDate: values.dueDate.trim(),
+        account: values.account.trim() || client,
+        status: (values.status as Task["status"]) || "Not Started",
+        priority: (values.priority as Task["priority"]) || "Normal",
+      };
+      const current = loadPersistedRecords<Task>(TASKS_STORAGE_KEY) ?? [...tasks];
+      savePersistedRecords(TASKS_STORAGE_KEY, [next, ...current]);
+    } else if (creatingRelated.key === "Meeting") {
+      const next: Meeting = {
+        id: `meeting-${Date.now()}`,
+        title: values.title.trim() || "Untitled Meeting",
+        from: values.from.trim(),
+        to: values.to.trim(),
+        relatedTo: values.relatedTo.trim() || client,
+      };
+      const current = loadPersistedRecords<Meeting>(MEETINGS_STORAGE_KEY) ?? [...meetings];
+      savePersistedRecords(MEETINGS_STORAGE_KEY, [next, ...current]);
+    }
+    setCreatingRelated(null);
+  }
+
+  function handleSave(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+    if (isSaving || !isDirty) return;
     setAttempted(true);
     const companyName = draft.companyName.trim();
     if (!companyName || !draft.status || !draft.clientStatus) return;
-    onSave({
+    const next = {
       ...draft,
       companyName,
       status: draft.status,
       clientStatus: draft.clientStatus,
-    });
-    onClose();
+    };
+    setIsSaving(true);
+    window.setTimeout(() => {
+      onSave(next);
+      initialDraftRef.current = next;
+      setDraft(next);
+      setSavedAt(`${formatHomeDate()} ${formatHomeTime()}`);
+      setIsSaving(false);
+    }, 220);
+  }
+
+  if (creatingRelated && creatingRelated.key !== "Task" && creatingRelated.key !== "Meeting") {
+    const moduleByCard: Record<string, ProductPipelineModuleKey> = {
+      Loan: "deals",
+      GTS: "tradeFinance",
+      GPS: "paymentService",
+      SF: "sustainableFinance",
+      GM: "globalMarket",
+      "Life Insurance": "lifeInsurance",
+    };
+    const moduleKey = moduleByCard[creatingRelated.key];
+    const config = PRODUCT_PIPELINE_CONFIGS[moduleKey];
+    const clientName = (draft.companyName || account.companyName).trim();
+    const currentClient = accounts.find((client) => client.companyName.trim().toLowerCase() === clientName.toLowerCase()) ?? account;
+    const emptyLoan = {
+      ...createEmptyLoan(config),
+      account: currentClient.companyName,
+      accountId: currentClient.id,
+    };
+    return (
+      <LoanFormPage
+        key={`client-related-create-${moduleKey}`}
+        loan={emptyLoan}
+        mode="create"
+        config={config}
+        onClose={() => setCreatingRelated(null)}
+        onSave={(loan) => {
+          setPipelineLoans(moduleKey, [loan, ...getPipelineLoans(moduleKey)]);
+          setCreatingRelated(null);
+        }}
+      />
+    );
   }
 
   return (
-    <section className="client-form-page">
+    <>
+    <form className={`client-form-page ${formStateClass}`} onSubmit={handleSave} noValidate>
       <header className="client-form-header">
-        <div>
-          <button type="button" className="client-form-back" onClick={onClose}>
-            <ChevronLeft size={14} />
-            Clients
+        <div className="client-form-title-row">
+          <button type="button" className="client-form-back client-form-back-icon client-form-back-arrow" onClick={onClose} aria-label="Back to clients">
+            <ChevronLeft size={18} strokeWidth={2.2} />
           </button>
-          <h2>{mode === "create" ? "Create Client" : account.companyName.trim() || "Edit Client"}</h2>
+          <div className="client-form-heading">
+            <h2>{recordTitle}</h2>
+            {isDirty ? <p className="client-form-dirty-state">Unsaved</p> : null}
+          </div>
         </div>
         <div className="client-form-actions">
-          <button type="button" className="secondary-button" onClick={onClose}>
-            Cancel
+          <button type="button" className="secondary-button" onClick={onClose} disabled={isSaving}>Cancel</button>
+          <button type="submit" className={`primary-button ${isSaving ? "is-saving" : ""}`} disabled={isSaving}>
+            {isSaving ? <span className="button-spinner" aria-hidden="true" /> : null}
+            <span>Save</span>
           </button>
-          <button type="button" className="primary-button" onClick={handleSave}>
-            Save
-          </button>
+          <button type="button" className="icon-button client-form-more" aria-label="More actions" disabled={isSaving}><MoreHorizontal size={18} /></button>
         </div>
       </header>
 
-      <div className="client-form-body">
-        <section className={`client-form-section ${clientStatusError ? "is-invalid" : ""}`}>
-          <div className="client-form-section-head">
-            <strong>Overview</strong>
-            <span>Core client identity and referral details</span>
+      <div className={`client-record-layout ${relatedListVisible ? "" : "is-related-collapsed"}`}>
+        {relatedListVisible ? (
+          <aside className="client-related-list">
+            <strong>Related List</strong>
+            {relatedCards.map((item) => (
+              <button
+                type="button"
+                key={item.key}
+                className="client-related-item"
+                onClick={() => scrollToRelatedCard(item.key)}
+                aria-label={`Go to ${item.label} related records`}
+              >
+                <span className="client-related-item-label">{item.label}</span>
+                <span className="client-related-item-count" aria-label={`${item.records.length} records`}>
+                  {item.records.length}
+                </span>
+                <span
+                  className="client-related-item-add"
+                  aria-label={`Create ${item.label}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openRelatedCreate(item.key);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      openRelatedCreate(item.key);
+                    }
+                  }}
+                >
+                  +
+                </span>
+                <span className="client-related-item-tooltip" role="tooltip">
+                  Add
+                </span>
+              </button>
+            ))}
+          </aside>
+        ) : null}
+        <main className="client-record-main">
+          <div className="client-form-toolbar">
+            <div className="client-form-tab-controls">
+              <button
+                type="button"
+                className="client-related-toggle"
+                aria-label={relatedListVisible ? "Hide related list" : "Show related list"}
+                title={relatedListVisible ? "Hide related list" : "Show related list"}
+                aria-pressed={relatedListVisible}
+                onClick={() => setRelatedListVisible((visible) => !visible)}
+              >
+                <span className="client-related-toggle-icon" aria-hidden="true">
+                  <span className="client-related-toggle-bar" />
+                  <span className="client-related-toggle-panel" />
+                </span>
+              </button>
+              <div className="client-form-tabs">
+                <button type="button" className={detailTab === "overview" ? "is-active" : ""} onClick={() => setDetailTab("overview")}>Overview</button>
+                <button type="button" className={detailTab === "timeline" ? "is-active" : ""} onClick={() => setDetailTab("timeline")}>Timeline</button>
+              </div>
+            </div>
+            <span className="client-last-update">
+              <Clock3 size={14} />
+              {savedAt ? `Saved ${savedAt}` : `Last Update: ${formatHomeDate()} ${formatHomeTime()}`}
+            </span>
           </div>
-          <div className="client-form-grid">
-            <div className={`form-row ${companyNameError ? "is-invalid" : ""}`}>
-              <label htmlFor="client-company-name">
-                Company Name <span className="field-required">*</span>
-              </label>
-              <input
-                id="client-company-name"
-                className={`field ${companyNameError ? "is-invalid" : ""}`}
-                value={draft.companyName}
-                aria-required="true"
-                aria-invalid={companyNameError}
-                onChange={(event) => update("companyName", event.target.value)}
-              />
-              {companyNameError ? <p className="field-error">Company Name is required.</p> : null}
-            </div>
-            <div className="form-row">
-              <label htmlFor="client-sic">SIC Code</label>
-              <input
-                id="client-sic"
-                className="field"
-                value={draft.sicCode}
-                onChange={(event) => update("sicCode", event.target.value)}
-              />
-            </div>
-            <div className="form-row">
-              <label>Industry Name</label>
-              <ChoiceField
-                name="industry"
-                options={INDUSTRY_OPTIONS}
-                value={draft.industry}
-                onChange={(next) => update("industry", next)}
-                ariaLabel="Industry Name"
-                placeholder=""
-              />
-            </div>
-            <div className="form-row">
-              <label>
-                Client Status <span className="field-required">*</span>
-              </label>
-              <ChoiceField
-                name="clientStatus"
-                options={CLIENT_STATUS_OPTIONS}
-                value={draft.clientStatus}
-                onChange={(next) => update("clientStatus", next)}
-                ariaLabel="Client Status"
-                invalid={clientStatusError}
-                groupClassName="choice-group-status"
-                getOptionClass={(option) => `choice-chip-status-${option.toLowerCase()}`}
-                placeholder=""
-              />
-              {clientStatusError ? <p className="field-error">Client Status is required.</p> : null}
-            </div>
-            <div className="form-row">
-              <label>Commercial Real Estate (CRE) Indicator</label>
-              <ChoiceField
-                name="creIndicator"
-                options={[...YES_NO_OPTIONS]}
-                value={yesNoValue(draft.creIndicator)}
-                onChange={(next) => update("creIndicator", parseYesNo(next))}
-                ariaLabel="Commercial Real Estate (CRE) Indicator"
-                placeholder=""
-              />
-            </div>
-            <div className="form-row">
-              <label htmlFor="client-rm">Relationship Manager</label>
-              <input
-                id="client-rm"
-                className="field"
-                value={draft.relationshipManager}
-                onChange={(event) => update("relationshipManager", event.target.value)}
-              />
-            </div>
-            <div className="form-row">
-              <label htmlFor="client-email">Company Email</label>
-              <input
-                id="client-email"
-                className="field"
-                type="email"
-                value={draft.email}
-                onChange={(event) => update("email", event.target.value)}
-              />
-            </div>
-            <div className="form-row">
-              <label htmlFor="client-phone">Company Phone 1</label>
-              <input
-                id="client-phone"
-                className="field"
-                type="tel"
-                value={draft.phone}
-                onChange={(event) => update("phone", event.target.value)}
-              />
-            </div>
-            <div className="form-row">
-              <label htmlFor="client-phone-2">Company Phone 2</label>
-              <input
-                id="client-phone-2"
-                className="field"
-                type="tel"
-                value={draft.phone2}
-                onChange={(event) => update("phone2", event.target.value)}
-              />
-            </div>
-            <div className="form-row">
-              <label htmlFor="client-campaign-code">Country/Region/Campaign Code</label>
-              <input
-                id="client-campaign-code"
-                className="field"
-                value={draft.countryRegionCampaignCode}
-                onChange={(event) => update("countryRegionCampaignCode", event.target.value)}
-              />
-            </div>
-            <div className="form-row">
-              <label htmlFor="client-referral-date">Referral Date</label>
-              <DateField
-                id="client-referral-date"
-                value={draft.referralDate}
-                onChange={(value) => update("referralDate", value)}
-                placeholder=""
-              />
-            </div>
-            <div className="form-row">
-              <label>Existing Client Referral</label>
-              <ChoiceField
-                name="existingClientReferral"
-                options={[...YES_NO_OPTIONS]}
-                value={yesNoValue(draft.existingClientReferral)}
-                onChange={(next) => update("existingClientReferral", parseYesNo(next))}
-                ariaLabel="Existing Client Referral"
-                placeholder=""
-              />
-            </div>
-            <div className="form-row">
-              <label htmlFor="client-hacn-buddying">HACN Buddying Region/Branch</label>
-              <input
-                id="client-hacn-buddying"
-                className="field"
-                value={draft.hacnBuddyingRegionBranch}
-                onChange={(event) => update("hacnBuddyingRegionBranch", event.target.value)}
-              />
-            </div>
-          </div>
-        </section>
+          <div className="client-form-body">
+            {detailTab === "overview" ? (
+              <>
+                <section className={`client-form-card ${clientStatusError || statusError ? "is-invalid" : ""}`}>
+                  <div className="client-form-card-head">
+                    <div>
+                      <strong>Client Information</strong>
+                    </div>
+                  </div>
+                  <div className="client-form-grid">
+                    <div className={`form-row ${companyNameError ? "is-invalid" : ""}`}>
+                      <label htmlFor="client-company-name">
+                        Company Name <span className="field-required">*</span>
+                      </label>
+                      <input
+                        id="client-company-name"
+                        className={`field ${companyNameError ? "is-invalid" : ""}`}
+                        value={draft.companyName}
+                        aria-required="true"
+                        aria-invalid={companyNameError}
+                        onChange={(event) => update("companyName", event.target.value)}
+                      />
+                      {companyNameError ? <p className="field-error">Company Name is required.</p> : null}
+                    </div>
+                  <div className="form-row">
+                    <label htmlFor="client-sic">SIC Code</label>
+                    <input
+                      id="client-sic"
+                      className="field"
+                      value={draft.sicCode}
+                      onChange={(event) => update("sicCode", event.target.value)}
+                    />
+                  </div>
+                  <div className="form-row">
+                    <label>Industry Name</label>
+                    <ChoiceField name="industry" options={INDUSTRY_OPTIONS} value={draft.industry} onChange={(next) => update("industry", next)} ariaLabel="Industry Name" placeholder="" />
+                  </div>
+                  <div className="form-row">
+                    <label>
+                      Client Status <span className="field-required">*</span>
+                    </label>
+                    <ChoiceField name="clientStatus" options={CLIENT_STATUS_OPTIONS} value={draft.clientStatus} onChange={(next) => update("clientStatus", next)} ariaLabel="Client Status" invalid={clientStatusError} groupClassName="choice-group-status" getOptionClass={(option) => `choice-chip-status-${option.toLowerCase()}`} placeholder="" />
+                    {clientStatusError ? <p className="field-error">Client Status is required.</p> : null}
+                  </div>
+                  <div className="form-row">
+                    <label>Commercial Real Estate (CRE) Indicator</label>
+                    <ChoiceField name="creIndicator" options={[...YES_NO_OPTIONS]} value={yesNoValue(draft.creIndicator)} onChange={(next) => update("creIndicator", parseYesNo(next))} ariaLabel="Commercial Real Estate (CRE) Indicator" placeholder="" />
+                  </div>
+                  <div className="form-row">
+                    <label htmlFor="client-rm">Relationship Manager</label>
+                    <input id="client-rm" className="field" value={draft.relationshipManager} onChange={(event) => update("relationshipManager", event.target.value)} />
+                  </div>
+                  <div className="form-row">
+                    <label htmlFor="client-email">Company Email</label>
+                    <input
+                      id="client-email"
+                      className={`field ${emailError ? "is-invalid" : ""}`}
+                      type="email"
+                      value={draft.email}
+                      aria-invalid={emailError}
+                      onChange={(event) => update("email", event.target.value)}
+                    />
+                    {emailError ? <p className="field-error">Please enter a valid email address.</p> : null}
+                  </div>
+                  <div className="form-row">
+                    <label htmlFor="client-phone">Company Phone 1</label>
+                    <input id="client-phone" className="field" type="tel" value={draft.phone} onChange={(event) => update("phone", event.target.value)} />
+                  </div>
+                  <div className="form-row">
+                    <label htmlFor="client-phone-2">Company Phone 2</label>
+                    <input id="client-phone-2" className="field" type="tel" value={draft.phone2} onChange={(event) => update("phone2", event.target.value)} />
+                  </div>
+                  <div className="form-row">
+                    <label htmlFor="client-campaign-code">Country/Region/Campaign Code</label>
+                    <input id="client-campaign-code" className="field" value={draft.countryRegionCampaignCode} onChange={(event) => update("countryRegionCampaignCode", event.target.value)} />
+                  </div>
+                  <div className="form-row">
+                    <label htmlFor="client-referral-date">Referral Date</label>
+                    <DateField id="client-referral-date" value={draft.referralDate} onChange={(value) => update("referralDate", value)} placeholder="" />
+                  </div>
+                  <div className="form-row">
+                    <label>Existing Client Referral</label>
+                    <ChoiceField name="existingClientReferral" options={[...YES_NO_OPTIONS]} value={yesNoValue(draft.existingClientReferral)} onChange={(next) => update("existingClientReferral", parseYesNo(next))} ariaLabel="Existing Client Referral" placeholder="" />
+                  </div>
+                  <div className="form-row">
+                    <label htmlFor="client-hacn-buddying">HACN Buddying Region/Branch</label>
+                    <input id="client-hacn-buddying" className="field" value={draft.hacnBuddyingRegionBranch} onChange={(event) => update("hacnBuddyingRegionBranch", event.target.value)} />
+                  </div>
 
-        <section className={`client-form-section ${statusError ? "is-invalid" : ""}`}>
-          <div className="client-form-section-head">
-            <strong>
-              Status <span className="field-required">*</span>
-            </strong>
-            <span>Record and banking relationship</span>
-          </div>
-          <div className="client-form-grid">
-            <div className="form-row">
-              <label>
-                Status <span className="field-required">*</span>
-              </label>
-              <ChoiceField
-                name="status"
-                options={ACCOUNT_STATUS_OPTIONS}
-                value={draft.status}
-                onChange={(next) => update("status", next)}
-                ariaLabel="Status"
-                invalid={statusError}
-                getOptionClass={(option) => `choice-chip-account-status choice-chip-account-status-${optionSlug(option)}`}
-                placeholder=""
-              />
-              {statusError ? <p className="field-error">Status is required.</p> : null}
-            </div>
-            <div className="form-row">
-              <label>Segment</label>
-              <ChoiceField
-                name="segment"
-                options={SEGMENT_OPTIONS}
-                value={draft.segment}
-                onChange={(next) => update("segment", next)}
-                ariaLabel="Segment"
-                placeholder=""
-              />
-            </div>
-          </div>
-        </section>
+                  <div className="form-row client-form-span-2 client-form-section-break">
+                    <strong>Record and banking relationship</strong>
+                  </div>
+                  <div className="form-row">
+                    <label>
+                      Status <span className="field-required">*</span>
+                    </label>
+                    <ChoiceField name="status" options={ACCOUNT_STATUS_OPTIONS} value={draft.status} onChange={(next) => update("status", next)} ariaLabel="Status" invalid={statusError} getOptionClass={(option) => `choice-chip-account-status choice-chip-account-status-${optionSlug(option)}`} placeholder="" />
+                    {statusError ? <p className="field-error">Status is required.</p> : null}
+                  </div>
+                  <div className="form-row">
+                    <label>Segment</label>
+                    <ChoiceField name="segment" options={SEGMENT_OPTIONS} value={draft.segment} onChange={(next) => update("segment", next)} ariaLabel="Segment" placeholder="" />
+                  </div>
 
-        <section className="client-form-section">
-          <div className="client-form-section-head">
-            <strong>Coverage & Engagement</strong>
-            <span>Products of interest and preferred channels</span>
-          </div>
-          <div className="client-form-grid">
-            <div className="form-row client-form-span-2">
-              <label>Products of Interest</label>
-              <MultiChoiceField
-                options={PRODUCT_INTEREST_OPTIONS}
-                value={draft.productsOfInterest}
-                onChange={(next) => update("productsOfInterest", next)}
-                ariaLabel="Products of Interest"
-                placeholder=""
-                searchPlaceholder="Search products"
-              />
-            </div>
-            <div className="form-row client-form-span-2">
-              <label>Preferred Channels</label>
-              <MultiChoiceField
-                options={CLIENT_CHANNEL_OPTIONS}
-                value={draft.preferredChannels}
-                onChange={(next) => update("preferredChannels", next)}
-                ariaLabel="Preferred Channels"
-                placeholder=""
-                searchPlaceholder="Search channels"
-              />
-            </div>
-          </div>
-        </section>
+                  <div className="form-row client-form-span-2 client-form-section-break">
+                    <strong>Coverage & Engagement</strong>
+                  </div>
+                  <div className="form-row client-form-span-2">
+                    <label>Products of Interest</label>
+                    <MultiChoiceField options={PRODUCT_INTEREST_OPTIONS} value={draft.productsOfInterest} onChange={(next) => update("productsOfInterest", next)} ariaLabel="Products of Interest" placeholder="" searchPlaceholder="Search products" />
+                  </div>
+                  <div className="form-row client-form-span-2">
+                    <label>Preferred Channels</label>
+                    <MultiChoiceField options={CLIENT_CHANNEL_OPTIONS} value={draft.preferredChannels} onChange={(next) => update("preferredChannels", next)} ariaLabel="Preferred Channels" placeholder="" searchPlaceholder="Search channels" />
+                  </div>
 
-        <section className="client-form-section">
-          <div className="client-form-section-head">
-            <strong>Classification</strong>
-            <span>Rating and risk</span>
-          </div>
-          <div className="client-form-grid">
-            <div className="form-row">
-              <label>Rating</label>
-              <ChoiceField
-                name="rating"
-                options={RATING_OPTIONS}
-                value={draft.rating}
-                onChange={(next) => update("rating", next)}
-                ariaLabel="Rating"
-                placeholder=""
-              />
-            </div>
-            <div className="form-row">
-              <label>Risk Rating</label>
-              <RiskRatingField
-                value={draft.riskRating}
-                onChange={(next) => update("riskRating", next)}
-              />
-            </div>
-            <div className="form-row">
-              <label>KYC Status</label>
-              <ChoiceField
-                name="kycStatus"
-                options={KYC_STATUS_OPTIONS}
-                value={draft.kycStatus}
-                onChange={(next) => update("kycStatus", next)}
-                ariaLabel="KYC Status"
-                getOptionClass={(option) => `choice-chip-kyc choice-chip-kyc-${optionSlug(option)}`}
-                variant="labels"
-                placeholder=""
-              />
-            </div>
-          </div>
-        </section>
+                  <div className="form-row client-form-span-2 client-form-section-break">
+                    <strong>Classification</strong>
+                  </div>
+                  <div className="form-row">
+                    <label>Rating</label>
+                    <ChoiceField name="rating" options={RATING_OPTIONS} value={draft.rating} onChange={(next) => update("rating", next)} ariaLabel="Rating" placeholder="" />
+                  </div>
+                  <div className="form-row">
+                    <label>Risk Rating</label>
+                    <RiskRatingField value={draft.riskRating} onChange={(next) => update("riskRating", next)} />
+                  </div>
+                  <div className="form-row">
+                    <label>KYC Status</label>
+                    <ChoiceField name="kycStatus" options={KYC_STATUS_OPTIONS} value={draft.kycStatus} onChange={(next) => update("kycStatus", next)} ariaLabel="KYC Status" getOptionClass={(option) => `choice-chip-kyc choice-chip-kyc-${optionSlug(option)}`} variant="labels" placeholder="" />
+                  </div>
 
-        <section className="client-form-section">
-          <div className="client-form-section-head">
-            <strong>Location & Entity</strong>
-            <span>Region and legal profile</span>
-          </div>
-          <div className="client-form-grid">
-            <div className="form-row">
-              <label>Region</label>
-              <ChoiceField
-                name="region"
-                options={REGION_OPTIONS}
-                value={draft.region}
-                onChange={(next) => update("region", next)}
-                ariaLabel="Region"
-                placeholder=""
-              />
-            </div>
-            <div className="form-row">
-              <label>Legal Entity Type</label>
-              <ChoiceField
-                name="legalEntityType"
-                options={LEGAL_ENTITY_OPTIONS}
-                value={draft.legalEntityType}
-                onChange={(next) => update("legalEntityType", next)}
-                ariaLabel="Legal Entity Type"
-                placeholder=""
-              />
-            </div>
-            <div className="form-row">
-              <label htmlFor="client-country">Country</label>
-              <input
-                id="client-country"
-                className="field"
-                value={draft.country}
-                onChange={(event) => update("country", event.target.value)}
-              />
-            </div>
-            <div className="form-row">
-              <label htmlFor="client-city">City</label>
-              <input
-                id="client-city"
-                className="field"
-                value={draft.city}
-                onChange={(event) => update("city", event.target.value)}
-              />
-            </div>
-            <div className="form-row client-form-span-2">
-              <label htmlFor="client-address">Address</label>
-              <input
-                id="client-address"
-                className="field"
-                value={draft.address}
-                onChange={(event) => update("address", event.target.value)}
-              />
-            </div>
-          </div>
-        </section>
+                  <div className="form-row client-form-span-2 client-form-section-break">
+                    <strong>Location & Entity</strong>
+                  </div>
+                  <div className="form-row">
+                    <label>Region</label>
+                    <ChoiceField name="region" options={REGION_OPTIONS} value={draft.region} onChange={(next) => update("region", next)} ariaLabel="Region" placeholder="" />
+                  </div>
+                  <div className="form-row">
+                    <label>Legal Entity Type</label>
+                    <ChoiceField name="legalEntityType" options={LEGAL_ENTITY_OPTIONS} value={draft.legalEntityType} onChange={(next) => update("legalEntityType", next)} ariaLabel="Legal Entity Type" placeholder="" />
+                  </div>
+                  <div className="form-row">
+                    <label htmlFor="client-country">Country</label>
+                    <input id="client-country" className="field" value={draft.country} onChange={(event) => update("country", event.target.value)} />
+                  </div>
+                  <div className="form-row">
+                    <label htmlFor="client-city">City</label>
+                    <input id="client-city" className="field" value={draft.city} onChange={(event) => update("city", event.target.value)} />
+                  </div>
+                  <div className="form-row client-form-span-2">
+                    <label htmlFor="client-address">Address</label>
+                    <input id="client-address" className="field" value={draft.address} onChange={(event) => update("address", event.target.value)} />
+                  </div>
 
-        <section className="client-form-section">
-          <div className="client-form-section-head">
-            <strong>Financial Profile</strong>
-            <span>Scale and credit</span>
-          </div>
-          <div className="client-form-grid">
-            <div className="form-row">
-              <label htmlFor="client-annual-revenue">Annual Revenue</label>
-              <input
-                id="client-annual-revenue"
-                className="field"
-                value={draft.annualRevenue}
-                onChange={(event) => update("annualRevenue", event.target.value)}
-              />
-            </div>
-            <div className="form-row">
-              <label htmlFor="client-credit-limit">Credit Limit</label>
-              <input
-                id="client-credit-limit"
-                className="field"
-                value={draft.creditLimit}
-                onChange={(event) => update("creditLimit", event.target.value)}
-              />
-            </div>
-            <div className="form-row">
-              <label htmlFor="client-employees">Employees</label>
-              <input
-                id="client-employees"
-                className="field"
-                value={draft.employeeCount}
-                onChange={(event) => update("employeeCount", event.target.value)}
-              />
-            </div>
-          </div>
-        </section>
+                  <div className="form-row client-form-span-2 client-form-section-break">
+                    <strong>Financial Profile</strong>
+                  </div>
+                  <div className="form-row">
+                    <label htmlFor="client-annual-revenue">Annual Revenue</label>
+                    <input id="client-annual-revenue" className="field" value={draft.annualRevenue} onChange={(event) => update("annualRevenue", event.target.value)} />
+                  </div>
+                  <div className="form-row">
+                    <label htmlFor="client-credit-limit">Credit Limit</label>
+                    <input id="client-credit-limit" className="field" value={draft.creditLimit} onChange={(event) => update("creditLimit", event.target.value)} />
+                  </div>
+                  <div className="form-row">
+                    <label htmlFor="client-employees">Employees</label>
+                    <input id="client-employees" className="field" value={draft.employeeCount} onChange={(event) => update("employeeCount", event.target.value)} />
+                  </div>
 
-        <section className="client-form-section">
-          <div className="client-form-section-head">
-            <strong>Primary Identification</strong>
-            <span>ID type and number</span>
+                  <div className="form-row client-form-span-2 client-form-section-break">
+                    <strong>Primary Identification</strong>
+                  </div>
+                  <div className="form-row">
+                    <label>Primary ID Type</label>
+                    <ChoiceField name="primaryIdType" options={PRIMARY_ID_TYPE_OPTIONS} value={draft.primaryIdType} onChange={(next) => update("primaryIdType", next)} ariaLabel="Primary ID Type" groupClassName="choice-group-id-type" getOptionClass={(option) => `choice-chip-id-${primaryIdTypeClass(option)}`} placeholder="" />
+                  </div>
+                  <div className="form-row">
+                    <label htmlFor="client-primary-id-number">Primary ID Number</label>
+                    <input id="client-primary-id-number" className="field" value={draft.primaryIdNumber} onChange={(event) => update("primaryIdNumber", event.target.value)} />
+                  </div>
+                </div>
+              </section>
+                <div className="client-related-cards">
+                  {relatedCards.map((card) => (
+                    <section
+                      className={`related-card client-related-view-card ${activeRelatedCard === card.key ? "is-highlighted" : ""}`}
+                      id={`client-related-card-${card.key}`}
+                      key={card.key}
+                    >
+                      <div className="section-header client-related-card-header" style={{ padding: 0 }}>
+                        <strong>{card.label}</strong>
+                        <div className="client-related-card-actions">
+                          <button className="list-new-button" type="button" onClick={() => openRelatedCreate(card.key)}>+ New</button>
+                          <button
+                            className="secondary-button"
+                            type="button"
+                            onClick={() => exportRelatedCard(card)}
+                            disabled={card.records.length === 0}
+                            title={`Export ${card.records.length} records as CSV`}
+                          >
+                            <Download size={15} />
+                            Export
+                          </button>
+                          <button
+                            className={`icon-button ${refreshingRelatedCard === card.key ? "is-refreshing" : ""}`}
+                            type="button"
+                            aria-label={`Refresh ${card.label}`}
+                            onClick={() => refreshRelatedCard(card.key)}
+                            disabled={refreshingRelatedCard !== null}
+                          >
+                            <RefreshCcw size={16} />
+                          </button>
+                          <button className="icon-button" type="button" aria-label={`More ${card.label} actions`}>
+                            <MoreHorizontal size={16} />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="client-related-table" role="table" aria-label={`${card.label} records`}>
+                        <div
+                          className="client-related-table-row client-related-table-head"
+                          role="row"
+                          style={{ gridTemplateColumns: `repeat(${card.columns.length}, minmax(140px, 1fr))` }}
+                        >
+                          {card.columns.map((column) => <span role="columnheader" key={column}>{column}</span>)}
+                        </div>
+                        {card.records.map((record) => (
+                          <div
+                            className="client-related-table-row"
+                            role="row"
+                            key={record.id}
+                            style={{ gridTemplateColumns: `repeat(${card.columns.length}, minmax(140px, 1fr))` }}
+                          >
+                            {record.values.map((value, index) => (
+                              <span className={index === 0 ? "client-related-primary-cell" : "muted"} role="cell" key={`${record.id}-${card.columns[index]}`}>{value}</span>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="client-timeline-panel">
+                <div className="related-card client-timeline-card">
+                  <div className="section-header" style={{ padding: 0, marginBottom: 10 }}>
+                    <strong>Timeline History</strong>
+                  </div>
+                  <div className="timeline">
+                    {auditChanges
+                      .filter(
+                        (item) =>
+                          item.table === "Clients" &&
+                          item.record.toLowerCase() === account.companyName.toLowerCase(),
+                      )
+                      .map((item) => (
+                        <div className="timeline-item client-audit-item" key={item.id}>
+                          <p className="muted">{item.occurredAt}</p>
+                          <strong>{item.action}</strong>
+                          <p>{item.user}</p>
+                          <p className="muted">Source: {item.source}</p>
+                          <div className="audit-changes-table audit-changes-table--compact client-audit-changes">
+                            <div className="audit-changes-head">
+                              <span>Field Name</span>
+                              <span>Old Value</span>
+                              <span>New Value</span>
+                            </div>
+                            <div className="audit-changes-body">
+                              {item.changes.map((change) => (
+                                <div className="audit-changes-row" key={`${item.id}-${change.field}-${change.oldValue}-${change.newValue}`}>
+                                  <span>{change.field}</span>
+                                  <span>{change.oldValue}</span>
+                                  <span>{change.newValue}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    {auditChanges.filter(
+                      (item) =>
+                        item.table === "Clients" &&
+                        item.record.toLowerCase() === account.companyName.toLowerCase(),
+                    ).length === 0 ? (
+                      <p className="muted">No audit history found for this client.</p>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-          <div className="client-form-grid">
-            <div className="form-row">
-              <label>Primary ID Type</label>
-              <ChoiceField
-                name="primaryIdType"
-                options={PRIMARY_ID_TYPE_OPTIONS}
-                value={draft.primaryIdType}
-                onChange={(next) => update("primaryIdType", next)}
-                ariaLabel="Primary ID Type"
-                groupClassName="choice-group-id-type"
-                getOptionClass={(option) => `choice-chip-id-${primaryIdTypeClass(option)}`}
-                placeholder=""
-              />
-            </div>
-            <div className="form-row">
-              <label htmlFor="client-primary-id-number">Primary ID Number</label>
-              <input
-                id="client-primary-id-number"
-                className="field"
-                value={draft.primaryIdNumber}
-                onChange={(event) => update("primaryIdNumber", event.target.value)}
-              />
-            </div>
-          </div>
-        </section>
+        </main>
       </div>
-    </section>
+    </form>
+    {creatingRelated && (creatingRelated.key === "Task" || creatingRelated.key === "Meeting") ? (
+      <QuickCreateModal
+        title={`Create ${creatingRelated.label}`}
+        fields={creatingRelated.key === "Task"
+          ? [
+              { key: "subject", label: "Subject" },
+              { key: "dueDate", label: "Due Date", type: "date" },
+              { key: "account", label: "Client" },
+              { key: "status", label: "Status", type: "select", options: TASK_STATUS_OPTIONS },
+              { key: "priority", label: "Priority", type: "select", options: TASK_PRIORITY_OPTIONS },
+            ]
+          : [
+              { key: "title", label: "Title" },
+              { key: "from", label: "From", placeholder: "YYYY-MM-DD HH:MM AM" },
+              { key: "to", label: "To", placeholder: "YYYY-MM-DD HH:MM AM" },
+              { key: "relatedTo", label: "Client" },
+            ]}
+        initialValues={creatingRelated.key === "Task"
+          ? { account: (draft.companyName || account.companyName).trim() }
+          : { relatedTo: (draft.companyName || account.companyName).trim() }}
+        onClose={() => setCreatingRelated(null)}
+        onSave={saveRelatedRecord}
+      />
+    ) : null}
+    </>
   );
 }
 
@@ -5713,6 +5971,35 @@ function ImportClientsModal({
   );
 }
 
+function loadPersistedRecords<T>(storageKey: string): T[] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as T[];
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function savePersistedRecords<T>(storageKey: string, rows: T[]) {
+  try {
+    window.localStorage.setItem(storageKey, JSON.stringify(rows));
+  } catch {
+    // Ignore storage failures so the workspace still functions without persistence.
+  }
+}
+
+const CLIENTS_STORAGE_KEY = "crm-demo-clients";
+const LEADS_STORAGE_KEY = "crm-demo-leads";
+const CONTACTS_STORAGE_KEY = "crm-demo-contacts";
+const TASKS_STORAGE_KEY = "crm-demo-tasks";
+const MEETINGS_STORAGE_KEY = "crm-demo-meetings";
+const CALLS_STORAGE_KEY = "crm-demo-calls";
+const CAMPAIGNS_STORAGE_KEY = "crm-demo-campaigns";
+const USERS_STORAGE_KEY = "crm-demo-users";
+
 function AccountsWorkspace({
   view = "All Clients",
   createIntentId = null,
@@ -5728,12 +6015,15 @@ function AccountsWorkspace({
   onRecordHandled?: () => void;
   onReturnHome?: () => void;
 }) {
-  const [rows, setRows] = useState<Account[]>(() => [...accounts]);
+  const [rows, setRows] = useState<Account[]>(() => loadPersistedRecords<Account>(CLIENTS_STORAGE_KEY) ?? [...accounts]);
   const [editing, setEditing] = useState<{ account: Account; mode: "create" | "edit" } | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [returnToHome, setReturnToHome] = useState(false);
   const [appliedRelatedRules, setAppliedRelatedRules] = useState<RelatedModuleRule[]>([]);
   const [sidebarColumnFilters, setSidebarColumnFilters] = useState<ColumnFilters>({});
+  useEffect(() => {
+    savePersistedRecords(CLIENTS_STORAGE_KEY, rows);
+  }, [rows]);
   const viewRows = view === "Active Clients" ? rows.filter((account) => account.status === "Active") : rows;
   const relatedFilteredRows = useMemo(
     () => applyRelatedModuleFilters(viewRows, "accounts", appliedRelatedRules),
@@ -5773,6 +6063,7 @@ function AccountsWorkspace({
   }
 
   function handleSave(next: Account) {
+    const previous = rows.find((item) => item.id === next.id);
     setRows((prev) => {
       const index = prev.findIndex((item) => item.id === next.id);
       if (index >= 0) {
@@ -5782,6 +6073,7 @@ function AccountsWorkspace({
       }
       return [next, ...prev];
     });
+    recordClientAuditChange(next, previous);
   }
 
   function renderAccountCell(account: Account, column: ColumnDef) {
@@ -5832,8 +6124,15 @@ function AccountsWorkspace({
         setRows((prev) => {
           const updatedById = new Map(updated.map((account) => [account.id, account]));
           const merged = prev.map((account) => updatedById.get(account.id) ?? account);
-          return [...created, ...merged];
+          const nextRows = [...created, ...merged];
+          savePersistedRecords(CLIENTS_STORAGE_KEY, nextRows);
+          return nextRows;
         });
+        for (const account of created) recordClientAuditChange(account);
+        for (const account of updated) {
+          const previous = rows.find((item) => item.id === account.id);
+          recordClientAuditChange(account, previous);
+        }
       }}
     />
   ) : null;
@@ -6013,7 +6312,7 @@ const TASK_IMPORT_FIELDS: ImportFieldDef<TaskImportFieldKey>[] = [
   { key: "dueDate", label: "Due Date", sample: "2026-08-15" },
   { key: "status", label: "Status", options: TASK_STATUS_OPTIONS, sample: "Not Started" },
   { key: "priority", label: "Priority", options: TASK_PRIORITY_OPTIONS, sample: "Normal" },
-  { key: "account", label: "Account", sample: "King (Sample)" },
+  { key: "account", label: "Client", sample: "King (Sample)" },
 ];
 
 function exportTasks(rows: Task[]) {
@@ -6034,10 +6333,14 @@ function TasksWorkspace({
   onRecordHandled?: () => void;
   onReturnHome?: () => void;
 }) {
-  const [rows, setRows] = useState(() => [...tasks]);
+  const [rows, setRows] = useState(() => loadPersistedRecords<Task>(TASKS_STORAGE_KEY) ?? [...tasks]);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
   const [returnToHome, setReturnToHome] = useState(false);
+
+  useEffect(() => {
+    savePersistedRecords(TASKS_STORAGE_KEY, rows);
+  }, [rows]);
 
   useEffect(() => {
     if (createIntentId == null) return;
@@ -6134,7 +6437,7 @@ function TasksWorkspace({
           fields={[
             { key: "subject", label: "Subject" },
             { key: "dueDate", label: "Due Date", type: "date" },
-            { key: "account", label: "Account" },
+            { key: "account", label: "Client" },
             {
               key: "status",
               label: "Status",
@@ -6202,7 +6505,7 @@ const meetingColumns: ColumnDef[] = [
   { key: "title", header: "Title", type: "text" },
   { key: "from", header: "From", type: "datetime" },
   { key: "to", header: "To", type: "datetime" },
-  { key: "relatedTo", header: "Related To", type: "text" },
+  { key: "relatedTo", header: "Client", type: "text" },
 ];
 
 function getMeetingCellValue(meeting: Meeting, key: string) {
@@ -6227,10 +6530,14 @@ function MeetingsWorkspace({
   onRecordHandled?: () => void;
   onReturnHome?: () => void;
 }) {
-  const [rows, setRows] = useState(() => [...meetings]);
+  const [rows, setRows] = useState(() => loadPersistedRecords<Meeting>(MEETINGS_STORAGE_KEY) ?? [...meetings]);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Meeting | null>(null);
   const [returnToHome, setReturnToHome] = useState(false);
+
+  useEffect(() => {
+    savePersistedRecords(MEETINGS_STORAGE_KEY, rows);
+  }, [rows]);
 
   useEffect(() => {
     if (createIntentId == null) return;
@@ -6325,7 +6632,7 @@ function MeetingsWorkspace({
             { key: "title", label: "Title" },
             { key: "from", label: "From", placeholder: "YYYY-MM-DD HH:MM AM" },
             { key: "to", label: "To", placeholder: "YYYY-MM-DD HH:MM AM" },
-            { key: "relatedTo", label: "Related To" },
+            { key: "relatedTo", label: "Client" },
             { key: "owner", label: "Owner" },
           ]}
           initialValues={
@@ -6407,8 +6714,12 @@ function CallsWorkspace({
   createIntentId?: number | null;
   onCreateHandled?: () => void;
 }) {
-  const [rows, setRows] = useState(() => [...calls]);
+  const [rows, setRows] = useState(() => loadPersistedRecords<Call>(CALLS_STORAGE_KEY) ?? [...calls]);
   const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    savePersistedRecords(CALLS_STORAGE_KEY, rows);
+  }, [rows]);
 
   useEffect(() => {
     if (createIntentId == null) return;
@@ -6876,6 +7187,7 @@ function LoanFormPage({
 }) {
   const [draft, setDraft] = useState<Deal>(() => ({ ...loan }));
   const [attempted, setAttempted] = useState(false);
+
   const nameError = attempted && !draft.name.trim();
   const accountError = attempted && !draft.account.trim();
   const amountError = attempted && draft.amount <= 0;
@@ -7048,11 +7360,11 @@ function LoanFormPage({
                   placeholder={`${config.facilityPrefix}-2026-001`} onChange={(event) => update("facilityNumber", event.target.value)} />
               </div>
               <div className={`form-row ${accountError ? "is-invalid" : ""}`}>
-                <label htmlFor="loan-account">Borrower / Client <span className="field-required">*</span></label>
+                <label htmlFor="loan-account">Client <span className="field-required">*</span></label>
                 <select
                   id="loan-account"
                   className={`field ${accountError ? "is-invalid" : ""}`}
-                  value={draft.accountId}
+                  value={accounts.some((client) => client.id === draft.accountId) ? draft.accountId : ""}
                   onChange={(event) => handleClientChange(event.target.value)}
                 >
                   <option value="">Select client</option>
@@ -8368,10 +8680,14 @@ function CampaignWorkspace({
   onRecordHandled?: () => void;
   onReturnHome?: () => void;
 }) {
-  const [rows, setRows] = useState<Campaign[]>(() => [...campaigns]);
+  const [rows, setRows] = useState<Campaign[]>(() => loadPersistedRecords<Campaign>(CAMPAIGNS_STORAGE_KEY) ?? [...campaigns]);
   const [editing, setEditing] = useState<{ campaign: Campaign; mode: "create" | "edit" } | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [returnToHome, setReturnToHome] = useState(false);
+
+  useEffect(() => {
+    savePersistedRecords(CAMPAIGNS_STORAGE_KEY, rows);
+  }, [rows]);
 
   useEffect(() => {
     if (createIntentId == null) return;
@@ -8858,6 +9174,12 @@ function UserFormModal({
                   aria-required="true"
                   aria-invalid={outlookError}
                   onChange={(event) => update("outlookEmail", event.target.value)}
+                  onInvalid={(event) => {
+                    event.currentTarget.setCustomValidity("Please enter a valid email address.");
+                  }}
+                  onInput={(event) => {
+                    event.currentTarget.setCustomValidity("");
+                  }}
                 />
                 {outlookError ? <p className="field-error">Outlook is required.</p> : null}
               </div>
@@ -8950,7 +9272,7 @@ function ImportUsersModal({
 }
 
 function UsersWorkspace({ onBack }: { onBack: () => void }) {
-  const [rows, setRows] = useState<DemoUser[]>(() => demoUsers.map((user) => ({ ...user })));
+  const [rows, setRows] = useState<DemoUser[]>(() => loadPersistedRecords<DemoUser>(USERS_STORAGE_KEY) ?? demoUsers.map((user) => ({ ...user })));
   const [editing, setEditing] = useState<{ user: DemoUser; mode: "create" | "edit" } | null>(null);
   const [importOpen, setImportOpen] = useState(false);
 
@@ -9080,16 +9402,373 @@ function UsersWorkspace({ onBack }: { onBack: () => void }) {
   );
 }
 
+type AuditFieldChange = {
+  field: string;
+  oldValue: string;
+  newValue: string;
+};
+
+type AuditChange = {
+  id: string;
+  occurredAt: string;
+  user: string;
+  action: "Created" | "Updated" | "Deleted";
+  table: string;
+  record: string;
+  source: string;
+  oldValue: string;
+  newValue: string;
+  changes: AuditFieldChange[];
+};
+
+const AUDIT_HISTORY_STORAGE_KEY = "crm-audit-history-v1";
+
+const initialAuditChanges: AuditChange[] = [
+  { id: "audit-1", occurredAt: "2026-08-03 09:42", user: "Jenny", action: "Updated", table: "Clients", record: "King (Sample)", source: "Web app", oldValue: "Pending", newValue: "Approved", changes: [{ field: "KYC Status", oldValue: "Pending", newValue: "Approved" }] },
+  { id: "audit-2", occurredAt: "2026-08-03 09:18", user: "Alice Chan", action: "Updated", table: "Loans", record: "Working Capital Facility", source: "Web app", oldValue: "Pipeline", newValue: "Committed", changes: [{ field: "Facility Status", oldValue: "Pipeline", newValue: "Committed" }] },
+  { id: "audit-3", occurredAt: "2026-08-02 16:05", user: "System", action: "Created", table: "Contacts", record: "Art Venere", source: "Import", oldValue: "—", newValue: "Created", changes: [{ field: "Record", oldValue: "—", newValue: "Created" }] },
+  { id: "audit-4", occurredAt: "2026-08-02 14:31", user: "Jenny", action: "Deleted", table: "Tasks", record: "Old follow-up", source: "Web app", oldValue: "Deleted", newValue: "—", changes: [{ field: "Record", oldValue: "Deleted", newValue: "—" }] },
+];
+
+function loadAuditChanges() {
+  if (typeof window === "undefined") return initialAuditChanges;
+  try {
+    const raw = window.localStorage.getItem(AUDIT_HISTORY_STORAGE_KEY);
+    if (!raw) return initialAuditChanges;
+    const parsed = JSON.parse(raw) as AuditChange[];
+    return Array.isArray(parsed) ? parsed : initialAuditChanges;
+  } catch {
+    return initialAuditChanges;
+  }
+}
+
+function saveAuditChanges(rows: AuditChange[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(AUDIT_HISTORY_STORAGE_KEY, JSON.stringify(rows));
+}
+
+const auditHistoryListeners = new Set<() => void>();
+let auditChanges: AuditChange[] = loadAuditChanges();
+
+function subscribeAuditHistory(listener: () => void) {
+  auditHistoryListeners.add(listener);
+  return () => auditHistoryListeners.delete(listener);
+}
+
+function getAuditHistorySnapshot() {
+  return auditChanges;
+}
+
+function resetAuditHistoryToInitialData() {
+  auditChanges = [...initialAuditChanges];
+  saveAuditChanges(auditChanges);
+  for (const listener of auditHistoryListeners) listener();
+}
+
+function pushAuditChange(change: AuditChange) {
+  auditChanges = [change, ...auditChanges];
+  saveAuditChanges(auditChanges);
+  for (const listener of auditHistoryListeners) listener();
+}
+
+function formatAuditValue(value: unknown) {
+  if (value == null || value === "") return "—";
+  if (Array.isArray(value)) return value.length ? value.join(", ") : "—";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return String(value);
+}
+
+function createAuditChange(params: {
+  user: string;
+  action: AuditChange["action"];
+  table: string;
+  record: string;
+  changes: AuditFieldChange[];
+  source?: string;
+}) {
+  return {
+    id: `audit-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+    occurredAt: new Date().toLocaleString("en-US", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }),
+    user: params.user,
+    action: params.action,
+    table: params.table,
+    record: params.record,
+    oldValue: params.oldValue,
+    newValue: params.newValue,
+    changes: params.changes,
+    source: params.source ?? "Web app",
+  } satisfies AuditChange;
+}
+
+function recordClientAuditChange(next: Account, prev?: Account) {
+  const table = "Clients";
+  const user = next.relationshipManager?.trim() || prev?.relationshipManager?.trim() || "Jenny";
+  const record = next.companyName || prev?.companyName || "Untitled Client";
+  const fields: Array<[keyof Account, string]> = [
+    ["companyName", "Company Name"],
+    ["status", "Status"],
+    ["clientStatus", "Client Status"],
+    ["segment", "Segment"],
+    ["relationshipManager", "Relationship Manager"],
+    ["phone", "Company Phone 1"],
+    ["phone2", "Company Phone 2"],
+    ["email", "Company Email"],
+    ["website", "Website"],
+    ["sicCode", "SIC Code"],
+    ["industry", "Industry Name"],
+    ["rating", "Rating"],
+    ["riskRating", "Risk Rating"],
+    ["kycStatus", "KYC Status"],
+    ["region", "Region"],
+    ["legalEntityType", "Legal Entity Type"],
+    ["country", "Country"],
+    ["city", "City"],
+    ["address", "Address"],
+    ["annualRevenue", "Annual Revenue"],
+    ["creditLimit", "Credit Limit"],
+    ["employeeCount", "Employees"],
+    ["clientSince", "Client Since"],
+    ["parentGroup", "Parent Group"],
+    ["primaryIdType", "Primary ID Type"],
+    ["primaryIdNumber", "Primary ID Number"],
+    ["creIndicator", "CRE Indicator"],
+    ["existingClientReferral", "Existing Client Referral"],
+    ["countryRegionCampaignCode", "Country/Region/Campaign Code"],
+    ["hacnBuddyingRegionBranch", "HACN Buddying Region/Branch"],
+    ["productsOfInterest", "Products of Interest"],
+    ["preferredChannels", "Preferred Channels"],
+  ];
+
+  const changes = fields
+    .map(([key, label]) => ({
+      field: label,
+      oldValue: formatAuditValue(prev ? prev[key] : undefined),
+      newValue: formatAuditValue(next[key]),
+    }))
+    .filter((change) => (prev ? change.oldValue !== change.newValue : change.newValue !== "—"));
+
+  if (!changes.length) return;
+
+  const oldValue = prev ? changes.map((change) => `${change.field}: ${change.oldValue}`).join("; ") : "—";
+  const newValue = changes.map((change) => `${change.field}: ${change.newValue}`).join("; ");
+
+  pushAuditChange(
+    createAuditChange({
+      user,
+      action: prev ? "Updated" : "Created",
+      table,
+      record,
+      oldValue,
+      newValue,
+      changes,
+    }),
+  );
+}
+
+const auditColumns: ColumnDef[] = [
+  { key: "occurredAt", header: "Date / Time", type: "datetime" },
+  { key: "user", header: "Changed By", type: "text" },
+  { key: "action", header: "Action", type: "enum", enumOptions: ["Created", "Updated", "Deleted"], colorGroup: "soft" },
+  { key: "table", header: "Table", type: "text" },
+  { key: "record", header: "Record", type: "text" },
+  { key: "changes", header: "Field Changes", type: "text" },
+  { key: "source", header: "Source", type: "text" },
+];
+
+const auditExportFields: ImportFieldDef<Exclude<keyof AuditChange, "id">>[] = [
+  { key: "occurredAt", label: "Date / Time", sample: "" },
+  { key: "user", label: "Changed By", sample: "" },
+  { key: "action", label: "Action", sample: "" },
+  { key: "table", label: "Table", sample: "" },
+  { key: "record", label: "Record", sample: "" },
+  { key: "source", label: "Source", sample: "" },
+];
+
+function exportAuditHistory(rows: AuditChange[]) {
+  const stamp = new Date().toISOString().slice(0, 10);
+  exportRecordsCsv(`audit-history-export-${stamp}.csv`, auditExportFields, rows);
+}
+
+function AuditHistoryForm({ row, onClose }: { row: AuditChange; onClose: () => void }) {
+  const fields: Array<[keyof AuditChange | "changes", string]> = [
+    ["occurredAt", "Date / Time"], ["user", "Changed By"], ["action", "Action"],
+    ["table", "Table"], ["record", "Record"], ["source", "Source"], ["changes", "Field Changes"],
+  ];
+  return (
+    <section className="client-form-page">
+      <header className="client-form-header">
+        <div>
+          <button type="button" className="client-form-back" onClick={onClose}>
+            <ChevronLeft size={14} /> Audit History
+          </button>
+          <h2>{row.record}</h2>
+        </div>
+        <div className="client-form-actions" />
+      </header>
+      <div className="client-form-body">
+        <section className="client-form-section">
+          <div className="client-form-section-head"><strong>Audit Change Details</strong><span>Read-only history record</span></div>
+          <div className="audit-changes-table">
+            <div className="audit-changes-head">
+              <span>Field Name</span>
+              <span>Old Value</span>
+              <span>New Value</span>
+            </div>
+            <div className="audit-changes-body">
+              {row.changes.map((change) => (
+                <div className="audit-changes-row" key={`${change.field}-${change.oldValue}-${change.newValue}`}>
+                  <span>{change.field}</span>
+                  <span>{change.oldValue}</span>
+                  <span>{change.newValue}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="client-form-grid">
+            {fields.filter(([key]) => key !== "changes").map(([key, label]) => (
+              <div className="form-row" key={key}>
+                <label htmlFor={`audit-${key}`}>{label}</label>
+                <input
+                  id={`audit-${key}`}
+                  className="field audit-readonly-field"
+                  value={String(row[key as keyof AuditChange])}
+                  readOnly
+                  tabIndex={-1}
+                  aria-readonly="true"
+                />
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    </section>
+  );
+}
+
+function AuditHistoryWorkspace() {
+  const [selectedRow, setSelectedRow] = useState<AuditChange | null>(null);
+  const auditRows = useSyncExternalStore(subscribeAuditHistory, getAuditHistorySnapshot, getAuditHistorySnapshot);
+  if (selectedRow) return <AuditHistoryForm row={selectedRow} onClose={() => setSelectedRow(null)} />;
+
+  return (
+    <ModuleViewActionsProvider>
+      <AuditHistoryHeader />
+      <RecordListShell
+        title="Audit History"
+        filters={["Date / Time", "Changed By", "Action", "Table", "Record", "Field Name", "Old Value", "New Value", "Source"]}
+        data={auditRows}
+        columns={auditColumns}
+        getCellValue={(row, key) => {
+          if (key === "changes") {
+            return row.changes.map((change) => `${change.field}: ${change.oldValue} → ${change.newValue}`).join("; ");
+          }
+          return String(row[key as keyof AuditChange]);
+        }}
+        onExport={exportAuditHistory}
+        renderRows={(rows, columns) => (
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.id} className="is-row-interactive" onClick={() => setSelectedRow(row)}>
+                {columns.map((column) => {
+                  if (column.key === "changes") {
+                    return (
+                      <td key={column.key}>
+                        <div className="audit-changes-table audit-changes-table--compact">
+                          <div className="audit-changes-head">
+                            <span>Field Name</span>
+                            <span>Old Value</span>
+                            <span>New Value</span>
+                          </div>
+                          <div className="audit-changes-body">
+                            {row.changes.map((change) => (
+                              <div className="audit-changes-row" key={`${change.field}-${change.oldValue}-${change.newValue}`}>
+                                <span>{change.field}</span>
+                                <span>{change.oldValue}</span>
+                                <span>{change.newValue}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </td>
+                    );
+                  }
+                  return <td key={column.key}>{String(row[column.key as keyof AuditChange])}</td>;
+                })}
+              </tr>
+            ))}
+          </tbody>
+        )}
+      />
+    </ModuleViewActionsProvider>
+  );
+}
+
+function AuditHistoryHeader() {
+  const { filtersOpen, toggleFilters } = useContext(ModuleFilterPanelContext);
+  const setActionsHost = useContext(ModuleViewActionsHostSetterContext);
+  const viewPickerRef = useRef<HTMLDetailsElement | null>(null);
+
+  return (
+    <header className="module-view-header">
+      <div className="module-view-title-row">
+        <details className="module-title-select" ref={viewPickerRef}>
+          <summary aria-label="Audit History view">
+            <span>Audit Histories</span>
+            <ChevronDown size={15} aria-hidden="true" />
+          </summary>
+          <div className="module-view-menu" role="listbox" aria-label="Audit History views">
+            <button type="button" role="option" aria-selected="true" className="is-selected">
+              Audit Histories
+            </button>
+          </div>
+        </details>
+      </div>
+      <div className="module-view-tabs-row">
+        <nav className="module-view-tabs" aria-label="Audit History views">
+          <button
+            type="button"
+            className="module-view-tab is-icon-tab is-active"
+            aria-label="Main table"
+            title="Main table"
+          >
+            <TableViewIcon size={17} />
+          </button>
+          <button
+            type="button"
+            className={`module-view-filter-toggle ${filtersOpen ? "is-active" : ""}`}
+            aria-label={filtersOpen ? "Hide filters" : "Show filters"}
+            aria-pressed={filtersOpen}
+            title={filtersOpen ? "Hide filters" : "Show filters"}
+            onClick={toggleFilters}
+          >
+            <Filter size={15} />
+          </button>
+        </nav>
+        <div className="module-view-actions" ref={setActionsHost} />
+      </div>
+    </header>
+  );
+}
+
 function AdminWorkspace({
   query,
   onQueryChange,
   onShowWorkflow,
   onOpenUsers,
+  onOpenAudit,
 }: {
   query: string;
   onQueryChange: (value: string) => void;
   onShowWorkflow: () => void;
   onOpenUsers: () => void;
+  onOpenAudit: () => void;
 }) {
   const filteredGroups = adminGroups
     .map((group) => ({
@@ -9105,6 +9784,7 @@ function AdminWorkspace({
   function handleAdminItem(item: string) {
     if (item === "Workflow Rules") onShowWorkflow();
     if (item === "Users") onOpenUsers();
+    if (item === "Audit Log") onOpenAudit();
   }
 
   return (
@@ -9571,6 +10251,12 @@ function ContactFormModal({
                   value={draft.email}
                   placeholder="name@company.com"
                   onChange={(event) => update("email", event.target.value)}
+                  onInvalid={(event) => {
+                    event.currentTarget.setCustomValidity("Please enter a valid email address.");
+                  }}
+                  onInput={(event) => {
+                    event.currentTarget.setCustomValidity("");
+                  }}
                 />
               </div>
               <div className="form-row">
@@ -9673,10 +10359,14 @@ function ContactsWorkspace({
   onRecordHandled?: () => void;
   onReturnHome?: () => void;
 }) {
-  const [rows, setRows] = useState<Contact[]>(() => [...contacts]);
+  const [rows, setRows] = useState<Contact[]>(() => loadPersistedRecords<Contact>(CONTACTS_STORAGE_KEY) ?? [...contacts]);
   const [editing, setEditing] = useState<{ contact: Contact; mode: "create" | "edit" } | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [returnToHome, setReturnToHome] = useState(false);
+
+  useEffect(() => {
+    savePersistedRecords(CONTACTS_STORAGE_KEY, rows);
+  }, [rows]);
 
   useEffect(() => {
     if (createIntentId == null) return;
