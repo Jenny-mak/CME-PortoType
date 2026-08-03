@@ -186,6 +186,12 @@ export type LoanFacility = {
   loanId: string;
   name: string;
   tranche: string;
+  facilityType: string;
+  greenLoanIndicator: "Yes" | "No";
+  sllIndicator: "Yes" | "No";
+  creditConnectIndicator: "Yes" | "No";
+  newIndustrySector: string;
+  dealType: string;
   currency: "CNY" | "HKD" | "USD" | "SGD";
   amount: number;
   status: LoanFacilityStatus;

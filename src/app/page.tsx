@@ -17,6 +17,7 @@ import {
   Clock3,
   CreditCard,
   Download,
+  Eye,
   FileText,
   Filter,
   GripVertical,
@@ -55,6 +56,8 @@ import {
 import { createPortal } from "react-dom";
 import { AiChatWidget } from "@/components/AiChatWidget";
 import { ImportRecordsModal } from "@/components/ImportRecordsModal";
+import { FieldFilterSection } from "@/components/FieldFilterSection";
+import { RelatedModuleFilterSection } from "@/components/RelatedModuleFilterSection";
 import { ClientKanbanBoard } from "@/components/ClientKanbanBoard";
 import { DateField } from "@/components/DateField";
 import { HomeCalendar, HomeLoansClosing } from "@/components/HomeCalendar";
@@ -83,12 +86,22 @@ import {
   meetings,
   modules,
   productPipelineData,
-  systemFilters,
   taskFilters,
   tasks,
   timeline,
   workflowRules,
 } from "@/lib/crm-data";
+import {
+  applyLoanCustomViewFilters,
+  defaultLoanVisibleFields,
+  filterLoansByView,
+  getLoanViewEditorState,
+  loadLoanViewsState,
+  LOAN_PUBLIC_VIEWS,
+  saveLoanViewsState,
+  type LoanCustomView,
+  type LoanPublicViewItem,
+} from "@/lib/loan-views";
 import { buildLoanNotifications, type AppNotification } from "@/lib/notifications";
 import {
   getAllPipelineLoans,
@@ -102,6 +115,10 @@ import {
   type ProductPipelineConfig,
   type ProductPipelineModuleKey,
 } from "@/lib/product-pipeline";
+import {
+  applyRelatedModuleFilters,
+  type RelatedModuleRule,
+} from "@/lib/related-module-filters";
 import { exportRecordsCsv, type ImportFieldDef } from "@/lib/csv-import";
 import { resolveOptionColor } from "@/lib/option-colors";
 import {
@@ -143,6 +160,7 @@ import {
   Lead,
   LegalEntityType,
   LoanBusinessUnit,
+  LoanFacility,
   Meeting,
   ModuleKey,
   PipelineStage,
@@ -204,7 +222,23 @@ const accentColors = [
   { key: "vividBlue", label: "Vivid Blue", value: "#1677ff" },
   { key: "signalRed", label: "Signal Red", value: "#b81020" },
   { key: "skyBlue", label: "Sky Blue", value: "#288cfa" },
+  { key: "violet", label: "Violet", value: "#6d28d9", mark: "#a78bfa" },
+  { key: "lagoonTeal", label: "Lagoon Teal", value: "#0f766e", mark: "#2dd4bf" },
+  { key: "copper", label: "Copper", value: "#c2410c", mark: "#fb923c" },
+  { key: "indigo", label: "Indigo", value: "#3730a3", mark: "#818cf8" },
+  { key: "rose", label: "Rose", value: "#be185d", mark: "#f472b6" },
+  { key: "graphite", label: "Graphite", value: "#3f3f46", mark: "#a1a1aa" },
   { key: "cloudGray", label: "Cloud Gray", value: "#f8f8f8", mark: "#8a8f98" },
+  { key: "dustyRose", label: "Dusty Rose", value: "#b86a78", mark: "#d4929c" },
+  { key: "mistBlue", label: "Mist Blue", value: "#6899c4", mark: "#94b8dc" },
+  { key: "eucalyptus", label: "Eucalyptus", value: "#52a888", mark: "#7ecdb0" },
+  { key: "cornflower", label: "Cornflower", value: "#5da3d9", mark: "#8fc0ea" },
+  { key: "terracotta", label: "Terracotta", value: "#c97a62", mark: "#e0a088" },
+  { key: "plum", label: "Plum", value: "#9d72b8", mark: "#b898d0" },
+  { key: "seafoam", label: "Seafoam", value: "#4a9e96", mark: "#72c4bc" },
+  { key: "mauve", label: "Mauve", value: "#a87898", mark: "#c49eb4" },
+  { key: "willow", label: "Willow", value: "#6aab72", mark: "#94cc9c" },
+  { key: "orchid", label: "Orchid", value: "#a67ec4", mark: "#c4a8dc" },
 ] as const satisfies ReadonlyArray<AccentColor>;
 
 type AccentKey = (typeof accentColors)[number]["key"];
@@ -567,6 +601,13 @@ export default function CRMWorkspace() {
   const [homeExpandedPanel, setHomeExpandedPanel] = useState<HomePanelKey | null>(null);
   const [moduleTabIntent, setModuleTabIntent] = useState<string | null>(null);
   const [accountsView, setAccountsView] = useState<"All Clients" | "Active Clients">("All Clients");
+  const [loansView, setLoansView] = useState<string>(LOAN_PUBLIC_VIEWS[0]);
+  const [loansViewLabel, setLoansViewLabel] = useState<string>(LOAN_PUBLIC_VIEWS[0]);
+  const [loanPublicViews, setLoanPublicViews] = useState<LoanPublicViewItem[]>(() =>
+    LOAN_PUBLIC_VIEWS.map((name) => ({ id: name, name })),
+  );
+  const [loanCustomViews, setLoanCustomViews] = useState<LoanCustomView[]>([]);
+  const [loanViewsHydrated, setLoanViewsHydrated] = useState(false);
   const [navToken, setNavToken] = useState(0);
 
   useEffect(() => {
@@ -575,6 +616,25 @@ export default function CRMWorkspace() {
     setAuthReady(true);
     if (user) setBootLoading(true);
   }, []);
+
+  useEffect(() => {
+    const saved = loadLoanViewsState();
+    setLoanPublicViews(saved.publicViews);
+    setLoanCustomViews(saved.customViews);
+    setLoansView(saved.selectedViewId);
+    setLoansViewLabel(saved.selectedViewLabel);
+    setLoanViewsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!loanViewsHydrated) return;
+    saveLoanViewsState({
+      publicViews: loanPublicViews,
+      customViews: loanCustomViews,
+      selectedViewId: loansView,
+      selectedViewLabel: loansViewLabel,
+    });
+  }, [loanViewsHydrated, loanPublicViews, loanCustomViews, loansView, loansViewLabel]);
 
   useEffect(() => {
     if (!bootLoading) return;
@@ -799,6 +859,16 @@ export default function CRMWorkspace() {
                   activeModule={activeModule}
                   accountsView={accountsView}
                   onAccountsViewChange={setAccountsView}
+                  loansView={loansView}
+                  onLoansViewChange={(id, label) => {
+                    setLoansView(id);
+                    setLoansViewLabel(label);
+                  }}
+                  loanPublicViews={loanPublicViews}
+                  onLoanPublicViewsChange={setLoanPublicViews}
+                  loanCustomViews={loanCustomViews}
+                  onLoanCustomViewsChange={setLoanCustomViews}
+                  currentOwner={sessionUser.displayName}
                   initialTab={moduleTabIntent}
                   onReturnHome={moduleReturnHome ? returnToHome : undefined}
                 />
@@ -836,6 +906,11 @@ export default function CRMWorkspace() {
                 {activeModule === "deals" && (
                   <DealsWorkspace
                     moduleKey="deals"
+                    view={loansView}
+                    viewLabel={loansViewLabel}
+                    publicViews={loanPublicViews}
+                    customViews={loanCustomViews}
+                    currentOwner={sessionUser.displayName}
                     createIntentId={createIntent?.module === "deals" ? createIntent.id : null}
                     onCreateHandled={() => setCreateIntent(null)}
                     openRecordIntent={recordIntent?.module === "deals" ? recordIntent : null}
@@ -1008,6 +1083,60 @@ const MODULE_VIEW_TAB_ICONS: Record<string, React.ReactNode> = {
   Kanban: <KanbanViewIcon size={17} />,
 };
 
+const MODULE_VIEW_TAB_TOOLTIPS: Record<string, string> = {
+  "Main table": "List View",
+  Kanban: "Kanban View",
+};
+
+function ModuleViewIconTab({
+  active,
+  icon,
+  tip,
+  onSelect,
+}: {
+  active: boolean;
+  icon: React.ReactNode;
+  tip: string;
+  onSelect: () => void;
+}) {
+  const [tipPos, setTipPos] = useState<{ top: number; left: number } | null>(null);
+
+  return (
+    <>
+      <button
+        type="button"
+        className={`module-view-tab is-icon-tab ${active ? "is-active" : ""}`}
+        onClick={onSelect}
+        aria-label={tip}
+        onMouseEnter={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect();
+          setTipPos({ top: rect.bottom + 6, left: rect.left + rect.width / 2 });
+        }}
+        onMouseLeave={() => setTipPos(null)}
+        onFocus={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect();
+          setTipPos({ top: rect.bottom + 6, left: rect.left + rect.width / 2 });
+        }}
+        onBlur={() => setTipPos(null)}
+      >
+        {icon}
+      </button>
+      {tipPos
+        ? createPortal(
+            <span
+              className="module-view-tab-tooltip is-portal"
+              role="tooltip"
+              style={{ top: tipPos.top, left: tipPos.left }}
+            >
+              {tip}
+            </span>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
+
 /** Modules that use the Clients-style icon chrome: Main table + Kanban only, no “add view”. */
 const ICON_VIEW_MODULES = new Set<ModuleKey>([
   "accounts",
@@ -1019,32 +1148,81 @@ const ICON_VIEW_MODULES = new Set<ModuleKey>([
   "lifeInsurance",
 ]);
 
+type LoanMenuView = { id: string; name: string; kind: "public" | "custom" };
+
 function ModuleViewHeader({
   activeModule,
   accountsView = "All Clients",
   onAccountsViewChange,
+  loansView = LOAN_PUBLIC_VIEWS[0],
+  onLoansViewChange,
+  loanPublicViews = LOAN_PUBLIC_VIEWS.map((name) => ({ id: name, name })),
+  onLoanPublicViewsChange,
+  loanCustomViews = [],
+  onLoanCustomViewsChange,
+  currentOwner = null,
   initialTab = null,
   onReturnHome,
 }: {
   activeModule: Exclude<ModuleKey, "home" | "reports">;
   accountsView?: "All Clients" | "Active Clients";
   onAccountsViewChange?: (view: "All Clients" | "Active Clients") => void;
+  loansView?: string;
+  onLoansViewChange?: (id: string, label: string) => void;
+  loanPublicViews?: LoanPublicViewItem[];
+  onLoanPublicViewsChange?: (views: LoanPublicViewItem[]) => void;
+  loanCustomViews?: LoanCustomView[];
+  onLoanCustomViewsChange?: (views: LoanCustomView[]) => void;
+  currentOwner?: string | null;
   initialTab?: string | null;
   onReturnHome?: () => void;
 }) {
   const moduleMeta = modules.find((module) => module.key === activeModule);
   const moduleLabel = moduleMeta?.label ?? activeModule;
   const useIconTabs = ICON_VIEW_MODULES.has(activeModule);
+  const supportsCustomViews = activeModule === "deals";
+  const dealColumns = useMemo(() => buildDealColumns(PRODUCT_PIPELINE_CONFIGS.deals), []);
   const tabs = useIconTabs
     ? ["Main table", "Kanban"]
     : (MODULE_VIEW_TABS[activeModule] ?? ["Main table"]);
   const { activeTab, setActiveTab } = useContext(ModuleViewTabContext);
-  const viewOptions =
+  const fallbackViews = useMemo(
+    () =>
+      activeModule === "accounts"
+        ? (["All Clients", "Active Clients"] as string[])
+        : [`All ${moduleLabel}`],
+    [activeModule, moduleLabel],
+  );
+  const [internalView, setInternalView] = useState<string>(fallbackViews[0]);
+  const [showCustomViewsAsTab, setShowCustomViewsAsTab] = useState(false);
+  const [newCustomViewOpen, setNewCustomViewOpen] = useState(false);
+  const [editingView, setEditingView] = useState<LoanMenuView | null>(null);
+  const [viewActionMenuId, setViewActionMenuId] = useState<string | null>(null);
+  const loanMenuViews = useMemo<LoanMenuView[]>(
+    () => [
+      ...loanPublicViews.map((view) => ({ id: view.id, name: view.name, kind: "public" as const })),
+      ...loanCustomViews.map((view) => ({ id: view.id, name: view.name, kind: "custom" as const })),
+    ],
+    [loanPublicViews, loanCustomViews],
+  );
+  const editingViewInitial = useMemo(() => {
+    if (!editingView) return null;
+    if (editingView.kind === "custom") {
+      const custom = loanCustomViews.find((view) => view.id === editingView.id);
+      if (!custom) return null;
+      return getLoanViewEditorState(custom, dealColumns, { kind: "custom", currentOwner });
+    }
+    const publicView = loanPublicViews.find((view) => view.id === editingView.id);
+    if (!publicView) return null;
+    return getLoanViewEditorState(publicView, dealColumns, { kind: "public", currentOwner });
+  }, [editingView, loanCustomViews, loanPublicViews, dealColumns, currentOwner]);
+  const selectedLoanView = loanMenuViews.find((view) => view.id === loansView) ?? loanMenuViews[0];
+  const selectedView =
     activeModule === "accounts"
-      ? (["All Clients", "Active Clients"] as const)
-      : ([`All ${moduleLabel}`] as const);
-  const [internalView, setInternalView] = useState<string>(viewOptions[0]);
-  const selectedView = activeModule === "accounts" ? accountsView : internalView;
+      ? accountsView
+      : supportsCustomViews
+        ? (selectedLoanView?.name ?? LOAN_PUBLIC_VIEWS[0])
+        : internalView;
   const viewPickerRef = useRef<HTMLDetailsElement>(null);
   const setActionsHost = useContext(ModuleViewActionsHostSetterContext);
   const { filtersOpen, toggleFilters } = useContext(ModuleFilterPanelContext);
@@ -1057,15 +1235,34 @@ function ModuleViewHeader({
   }, [activeModule, setActiveTab, initialTab, useIconTabs]);
 
   useEffect(() => {
+    if (!supportsCustomViews) {
+      setInternalView(fallbackViews[0]);
+    }
+    setShowCustomViewsAsTab(false);
+    setNewCustomViewOpen(false);
+    setEditingView(null);
+    setViewActionMenuId(null);
+  }, [activeModule, fallbackViews, supportsCustomViews]);
+
+  useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
+      const target = event.target as HTMLElement | null;
       const details = viewPickerRef.current;
-      if (!details?.open) return;
-      if (!details.contains(event.target as Node)) {
+      if (details?.open && target && !details.contains(target)) {
         details.removeAttribute("open");
+        setViewActionMenuId(null);
+        return;
+      }
+      if (target && !target.closest("[data-view-action-root]")) {
+        setViewActionMenuId(null);
       }
     }
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
+        if (viewActionMenuId) {
+          setViewActionMenuId(null);
+          return;
+        }
         viewPickerRef.current?.removeAttribute("open");
       }
     }
@@ -1075,11 +1272,226 @@ function ModuleViewHeader({
       document.removeEventListener("mousedown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, []);
+  }, [viewActionMenuId]);
+
+  function selectListView(viewId: string, label: string) {
+    if (activeModule === "accounts") {
+      onAccountsViewChange?.(viewId as "All Clients" | "Active Clients");
+    } else if (supportsCustomViews) {
+      onLoansViewChange?.(viewId, label);
+    } else {
+      setInternalView(viewId);
+    }
+    setViewActionMenuId(null);
+    viewPickerRef.current?.removeAttribute("open");
+  }
+
+  function handleSaveCustomView(view: Omit<LoanCustomView, "id"> & { id?: string }) {
+    if (view.id && editingView?.kind === "public") {
+      onLoanPublicViewsChange?.(
+        loanPublicViews.map((item) =>
+          item.id === view.id
+            ? {
+                id: item.id,
+                name: view.name,
+                visibleFields: view.visibleFields,
+                filters: view.filters,
+                useColumnFilters: true,
+              }
+            : item,
+        ),
+      );
+      if (loansView === view.id) {
+        onLoansViewChange?.(view.id, view.name);
+      }
+    } else if (view.id) {
+      onLoanCustomViewsChange?.(
+        loanCustomViews.map((item) =>
+          item.id === view.id
+            ? {
+                id: item.id,
+                name: view.name,
+                visibleFields: view.visibleFields,
+                filters: view.filters,
+              }
+            : item,
+        ),
+      );
+      if (loansView === view.id) {
+        onLoansViewChange?.(view.id, view.name);
+      }
+    } else {
+      const next: LoanCustomView = {
+        id: `cv-${Date.now()}`,
+        name: view.name,
+        visibleFields: view.visibleFields,
+        filters: view.filters,
+      };
+      onLoanCustomViewsChange?.([...loanCustomViews, next]);
+      onLoansViewChange?.(next.id, next.name);
+    }
+    setNewCustomViewOpen(false);
+    setEditingView(null);
+  }
+
+  function handleDeleteView(view: LoanMenuView) {
+    const remaining = loanMenuViews.filter((item) => item.id !== view.id);
+    if (remaining.length === 0) return;
+
+    if (view.kind === "public") {
+      onLoanPublicViewsChange?.(loanPublicViews.filter((item) => item.id !== view.id));
+    } else {
+      onLoanCustomViewsChange?.(loanCustomViews.filter((item) => item.id !== view.id));
+    }
+
+    if (loansView === view.id) {
+      const fallback = remaining[0];
+      onLoansViewChange?.(fallback.id, fallback.name);
+    }
+    setViewActionMenuId(null);
+  }
+
+  function renderViewOption(view: LoanMenuView) {
+    const selected = supportsCustomViews
+      ? loansView === view.id
+      : selectedView === view.name || selectedView === view.id;
+    const menuOpen = viewActionMenuId === view.id;
+    return (
+      <div
+        key={view.id}
+        className={`module-view-menu-item ${selected ? "is-selected" : ""} ${menuOpen ? "is-menu-open" : ""}`}
+        role="option"
+        aria-selected={selected}
+        data-view-action-root={supportsCustomViews ? "" : undefined}
+      >
+        <button
+          type="button"
+          className="module-view-menu-item-main"
+          onClick={() => selectListView(view.id, view.name)}
+        >
+          <span>{view.name}</span>
+        </button>
+        {supportsCustomViews ? (
+          <div className="module-view-menu-item-actions">
+            <button
+              type="button"
+              className="module-view-menu-item-more"
+              aria-label={`More actions for ${view.name}`}
+              aria-expanded={menuOpen}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setViewActionMenuId((current) => (current === view.id ? null : view.id));
+              }}
+            >
+              <MoreHorizontal size={14} aria-hidden="true" />
+            </button>
+            {menuOpen ? (
+              <div className="module-view-item-popover" role="menu">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setViewActionMenuId(null);
+                    viewPickerRef.current?.removeAttribute("open");
+                    setEditingView(view);
+                  }}
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="is-danger"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    handleDeleteView(view);
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  const viewMenu = (
+    <div className="module-view-menu" role="listbox" aria-label={`${moduleLabel} views`}>
+      {supportsCustomViews ? (
+        <>
+          {loanPublicViews.length > 0 ? (
+            <>
+              <div className="module-view-menu-section" role="presentation">
+                Public Views
+              </div>
+              {loanPublicViews.map((view) =>
+                renderViewOption({ id: view.id, name: view.name, kind: "public" }),
+              )}
+            </>
+          ) : null}
+          {loanCustomViews.length > 0 ? (
+            <>
+              <div className="module-view-menu-section" role="presentation">
+                Created By Me
+              </div>
+              {loanCustomViews.map((view) =>
+                renderViewOption({ id: view.id, name: view.name, kind: "custom" }),
+              )}
+            </>
+          ) : null}
+          <div className="module-view-menu-footer">
+            <button
+              type="button"
+              className={`module-view-menu-toggle ${showCustomViewsAsTab ? "is-active" : ""}`}
+              aria-pressed={showCustomViewsAsTab}
+              onClick={() => {
+                setShowCustomViewsAsTab((open) => !open);
+                setViewActionMenuId(null);
+                viewPickerRef.current?.removeAttribute("open");
+              }}
+            >
+              <Eye size={16} aria-hidden="true" />
+              <span>{showCustomViewsAsTab ? "Hide custom views as Tab" : "Show custom views as Tab"}</span>
+            </button>
+            <button
+              type="button"
+              className="module-view-menu-link"
+              onClick={() => {
+                viewPickerRef.current?.removeAttribute("open");
+                setViewActionMenuId(null);
+                setNewCustomViewOpen(true);
+              }}
+            >
+              New Custom View
+            </button>
+          </div>
+        </>
+      ) : (
+        fallbackViews.map((view) => (
+          <button
+            key={view}
+            type="button"
+            role="option"
+            aria-selected={selectedView === view}
+            className={selectedView === view ? "is-selected" : ""}
+            onClick={() => selectListView(view, view)}
+          >
+            {view}
+          </button>
+        ))
+      )}
+    </div>
+  );
 
   return (
     <header className="module-view-header">
-      <div className="module-view-title-row">
+      <div className={`module-view-title-row ${showCustomViewsAsTab ? "is-pill-mode" : ""}`}>
         {onReturnHome ? (
           <button
             type="button"
@@ -1090,48 +1502,61 @@ function ModuleViewHeader({
             <ChevronLeft size={18} />
           </button>
         ) : null}
-        <details className="module-title-select" ref={viewPickerRef}>
-          <summary aria-label={`${moduleLabel} view`}>
-            <span>{selectedView}</span>
-            <ChevronDown size={15} aria-hidden="true" />
-          </summary>
-          <div className="module-view-menu" role="listbox" aria-label={`${moduleLabel} views`}>
-            {viewOptions.map((view) => (
-              <button
-                key={view}
-                type="button"
-                role="option"
-                aria-selected={selectedView === view}
-                className={selectedView === view ? "is-selected" : ""}
-                onClick={() => {
-                  if (activeModule === "accounts") {
-                    onAccountsViewChange?.(view as "All Clients" | "Active Clients");
-                  } else {
-                    setInternalView(view);
-                  }
-                  viewPickerRef.current?.removeAttribute("open");
-                }}
-              >
-                {view}
-              </button>
-            ))}
+        {supportsCustomViews && showCustomViewsAsTab ? (
+          <div className="module-view-pill-bar" aria-label={`${moduleLabel} views`}>
+            <div className="module-view-pill-list">
+              {loanMenuViews.map((view) => (
+                <button
+                  key={view.id}
+                  type="button"
+                  className={`module-view-pill ${loansView === view.id ? "is-active" : ""}`}
+                  aria-pressed={loansView === view.id}
+                  onClick={() => selectListView(view.id, view.name)}
+                >
+                  {view.name}
+                </button>
+              ))}
+            </div>
+            <details className="module-view-pill-more" ref={viewPickerRef}>
+              <summary aria-label="More views">
+                <MoreHorizontal size={16} aria-hidden="true" />
+              </summary>
+              {viewMenu}
+            </details>
           </div>
-        </details>
+        ) : (
+          <details className="module-title-select" ref={viewPickerRef}>
+            <summary aria-label={`${moduleLabel} view`}>
+              <span>{selectedView}</span>
+              <ChevronDown size={15} aria-hidden="true" />
+            </summary>
+            {viewMenu}
+          </details>
+        )}
       </div>
       <div className="module-view-tabs-row">
-        <nav className="module-view-tabs" aria-label={`${moduleLabel} views`}>
+        <nav className="module-view-tabs" aria-label={`${moduleLabel} display views`}>
           {tabs.map((tab) => {
             const icon = useIconTabs ? MODULE_VIEW_TAB_ICONS[tab] : undefined;
+            if (icon) {
+              return (
+                <ModuleViewIconTab
+                  key={tab}
+                  active={tab === activeTab}
+                  icon={icon}
+                  tip={MODULE_VIEW_TAB_TOOLTIPS[tab] ?? tab}
+                  onSelect={() => setActiveTab(tab)}
+                />
+              );
+            }
             return (
               <button
                 key={tab}
                 type="button"
-                className={`module-view-tab ${icon ? "is-icon-tab" : ""} ${tab === activeTab ? "is-active" : ""}`}
+                className={`module-view-tab ${tab === activeTab ? "is-active" : ""}`}
                 onClick={() => setActiveTab(tab)}
-                aria-label={icon ? tab : undefined}
-                title={icon ? tab : undefined}
               >
-                {icon ?? tab}
+                {tab}
               </button>
             );
           })}
@@ -1153,6 +1578,26 @@ function ModuleViewHeader({
         </nav>
         <div className="module-view-actions" ref={setActionsHost} />
       </div>
+      {newCustomViewOpen ? (
+        <CustomViewModal
+          title="New Custom View"
+          columns={dealColumns}
+          existingNames={loanMenuViews.map((view) => view.name)}
+          onClose={() => setNewCustomViewOpen(false)}
+          onSave={handleSaveCustomView}
+        />
+      ) : null}
+      {editingView && editingViewInitial ? (
+        <CustomViewModal
+          key={editingViewInitial.id}
+          title="Edit Custom View"
+          columns={dealColumns}
+          initial={editingViewInitial}
+          existingNames={loanMenuViews.map((view) => view.name)}
+          onClose={() => setEditingView(null)}
+          onSave={handleSaveCustomView}
+        />
+      ) : null}
     </header>
   );
 }
@@ -2078,6 +2523,408 @@ function HomeDashboard({
   );
 }
 
+type CustomViewFilterRow = {
+  id: string;
+  fieldKey: string;
+  filter: ColumnFilter;
+};
+
+function filtersToRows(filters: ColumnFilters): CustomViewFilterRow[] {
+  return Object.entries(filters)
+    .filter((entry): entry is [string, ColumnFilter] => Boolean(entry[1] && hasActiveFilter(entry[1])))
+    .map(([fieldKey, filter]) => ({
+      id: `fr-${fieldKey}`,
+      fieldKey,
+      filter,
+    }));
+}
+
+function rowsToFilters(rows: CustomViewFilterRow[]): ColumnFilters {
+  const next: ColumnFilters = {};
+  for (const row of rows) {
+    if (!row.fieldKey || !hasActiveFilter(row.filter)) continue;
+    next[row.fieldKey] = row.filter;
+  }
+  return next;
+}
+
+function CustomViewModal({
+  title,
+  columns,
+  initial,
+  existingNames,
+  onClose,
+  onSave,
+}: {
+  title: string;
+  columns: ColumnDef[];
+  initial?: LoanCustomView | null;
+  existingNames: string[];
+  onClose: () => void;
+  onSave: (view: Omit<LoanCustomView, "id"> & { id?: string }) => void;
+}) {
+  const fieldColumns = useMemo(
+    () => columns.filter((column) => column.key !== "select" && isColumnFilterable(column)),
+    [columns],
+  );
+  const allFieldColumns = useMemo(
+    () => columns.filter((column) => column.key !== "select"),
+    [columns],
+  );
+  const [name, setName] = useState(initial?.name ?? "");
+  const [visibleFields, setVisibleFields] = useState<string[]>(
+    () => initial?.visibleFields ?? defaultLoanVisibleFields(columns),
+  );
+  const [filterRows, setFilterRows] = useState<CustomViewFilterRow[]>(() =>
+    initial ? filtersToRows(initial.filters) : [],
+  );
+  const [openEnumFilterId, setOpenEnumFilterId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("[data-enum-filter-select]")) return;
+      setOpenEnumFilterId(null);
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, []);
+
+  function toggleField(key: string) {
+    setVisibleFields((prev) =>
+      prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key],
+    );
+  }
+
+  function addFilterRow() {
+    const used = new Set(filterRows.map((row) => row.fieldKey));
+    const nextField = fieldColumns.find((column) => !used.has(column.key)) ?? fieldColumns[0];
+    if (!nextField) return;
+    setFilterRows((prev) => [
+      ...prev,
+      {
+        id: `fr-${Date.now()}-${prev.length}`,
+        fieldKey: nextField.key,
+        filter: createEmptyFilter(nextField.type),
+      },
+    ]);
+  }
+
+  function updateFilterRow(id: string, patch: Partial<CustomViewFilterRow>) {
+    setFilterRows((prev) =>
+      prev.map((row) => {
+        if (row.id !== id) return row;
+        if (patch.fieldKey && patch.fieldKey !== row.fieldKey) {
+          const column = fieldColumns.find((item) => item.key === patch.fieldKey);
+          return {
+            ...row,
+            fieldKey: patch.fieldKey,
+            filter: column ? createEmptyFilter(column.type) : row.filter,
+          };
+        }
+        return { ...row, ...patch };
+      }),
+    );
+  }
+
+  function updateFilterOp(id: string, op: string) {
+    setFilterRows((prev) =>
+      prev.map((row) => {
+        if (row.id !== id) return row;
+        const column = fieldColumns.find((item) => item.key === row.fieldKey);
+        if (!column) return row;
+        const next = createEmptyFilter(column.type, op);
+        if (row.filter.kind === "text" && next.kind === "text") next.value = row.filter.value;
+        if (row.filter.kind === "enum" && next.kind === "enum") next.values = row.filter.values;
+        if (
+          (row.filter.kind === "number" || row.filter.kind === "duration" || row.filter.kind === "date") &&
+          (next.kind === "number" || next.kind === "duration" || next.kind === "date")
+        ) {
+          next.value = row.filter.value;
+          next.valueTo = row.filter.valueTo ?? "";
+        }
+        return { ...row, filter: next };
+      }),
+    );
+  }
+
+  function handleSave() {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError("Please enter a view name.");
+      return;
+    }
+    const duplicate = existingNames.some(
+      (item) => item.toLowerCase() === trimmed.toLowerCase() && item.toLowerCase() !== (initial?.name ?? "").toLowerCase(),
+    );
+    if (duplicate) {
+      setError("A view with this name already exists.");
+      return;
+    }
+    if (visibleFields.length === 0) {
+      setError("Select at least one field to display.");
+      return;
+    }
+    const orderedFields = allFieldColumns
+      .map((column) => column.key)
+      .filter((key) => visibleFields.includes(key));
+    onSave({
+      id: initial?.id,
+      name: trimmed,
+      visibleFields: orderedFields,
+      filters: rowsToFilters(filterRows),
+    });
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <section
+        className="modal-card custom-view-modal"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="page-header" style={{ marginBottom: 14 }}>
+          <h2>{title}</h2>
+          <button type="button" className="icon-button" aria-label="Close" onClick={onClose}>
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="custom-view-modal-body">
+          <div className="form-row">
+            <label htmlFor="custom-view-name">View Name</label>
+            <input
+              id="custom-view-name"
+              className="field"
+              value={name}
+              placeholder="e.g. High Risk Pipeline"
+              onChange={(event) => {
+                setName(event.target.value);
+                if (error) setError("");
+              }}
+            />
+          </div>
+
+          <section className="custom-view-section">
+            <div className="custom-view-section-head">
+              <h3>Display Fields</h3>
+              <div className="custom-view-section-actions">
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => setVisibleFields(allFieldColumns.map((column) => column.key))}
+                >
+                  Select all
+                </button>
+                <button type="button" className="text-button" onClick={() => setVisibleFields([])}>
+                  Clear
+                </button>
+              </div>
+            </div>
+            <div className="custom-view-field-grid">
+              {allFieldColumns.map((column) => {
+                const checked = visibleFields.includes(column.key);
+                return (
+                  <label key={column.key} className={`custom-view-field-option ${checked ? "is-checked" : ""}`}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => {
+                        toggleField(column.key);
+                        if (error) setError("");
+                      }}
+                    />
+                    <span>{column.header}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="custom-view-section">
+            <div className="custom-view-section-head">
+              <h3>Filters</h3>
+              <button type="button" className="text-button" onClick={addFilterRow}>
+                <Plus size={14} />
+                Add filter
+              </button>
+            </div>
+            {filterRows.length === 0 ? (
+              <p className="custom-view-empty">No filters yet. Add a condition to narrow this view.</p>
+            ) : (
+              <div className="custom-view-filter-list">
+                {filterRows.map((row) => {
+                  const column =
+                    fieldColumns.find((item) => item.key === row.fieldKey) ?? fieldColumns[0];
+                  if (!column) return null;
+                  const operators = getFilterOperators(column.type);
+                  const needsValue = filterOpNeedsValue(row.filter.op);
+                  const needsSecond = filterOpNeedsSecondValue(row.filter.op);
+                  return (
+                    <div key={row.id} className="custom-view-filter-row">
+                      <select
+                        className="field"
+                        value={row.fieldKey}
+                        aria-label="Filter field"
+                        onChange={(event) => {
+                          setOpenEnumFilterId(null);
+                          updateFilterRow(row.id, { fieldKey: event.target.value });
+                        }}
+                      >
+                        {fieldColumns.map((item) => (
+                          <option key={item.key} value={item.key}>
+                            {item.header}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        className="field"
+                        value={row.filter.op}
+                        aria-label="Filter operator"
+                        onChange={(event) => {
+                          setOpenEnumFilterId(null);
+                          updateFilterOp(row.id, event.target.value);
+                        }}
+                      >
+                        {operators.map((item) => (
+                          <option key={item.value} value={item.value}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </select>
+                      {column.type === "enum" && row.filter.kind === "enum" && row.filter.op === "is_any_of" ? (
+                        <div className="custom-view-enum-select" data-enum-filter-select="">
+                          <button
+                            type="button"
+                            className="field custom-view-enum-trigger"
+                            aria-expanded={openEnumFilterId === row.id}
+                            aria-haspopup="listbox"
+                            onClick={() =>
+                              setOpenEnumFilterId((current) => (current === row.id ? null : row.id))
+                            }
+                          >
+                            <span>
+                              {row.filter.values.length > 0
+                                ? row.filter.values.length === 1
+                                  ? row.filter.values[0]
+                                  : `${row.filter.values.length} selected`
+                                : "Select values"}
+                            </span>
+                            <ChevronDown size={14} aria-hidden="true" />
+                          </button>
+                          {openEnumFilterId === row.id ? (
+                            <div className="custom-view-enum-menu" role="listbox" aria-multiselectable="true">
+                              {(column.enumOptions ?? []).map((option) => {
+                                const checked =
+                                  row.filter.kind === "enum" && row.filter.values.includes(option);
+                                return (
+                                  <label
+                                    key={option}
+                                    className={`custom-view-enum-option ${checked ? "is-checked" : ""}`}
+                                    role="option"
+                                    aria-selected={checked}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={() => {
+                                        if (row.filter.kind !== "enum") return;
+                                        const values = checked
+                                          ? row.filter.values.filter((item) => item !== option)
+                                          : [...row.filter.values, option];
+                                        updateFilterRow(row.id, {
+                                          filter: { kind: "enum", op: "is_any_of", values },
+                                        });
+                                      }}
+                                    />
+                                    <span>{option}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {(column.type === "text" ||
+                        column.type === "email" ||
+                        column.type === "phone" ||
+                        column.type === "url") &&
+                      needsValue &&
+                      row.filter.kind === "text" ? (
+                        <input
+                          className="field"
+                          value={row.filter.value}
+                          placeholder="Value"
+                          onChange={(event) =>
+                            updateFilterRow(row.id, {
+                              filter: { ...row.filter, kind: "text", value: event.target.value },
+                            })
+                          }
+                        />
+                      ) : null}
+                      {(column.type === "number" || column.type === "duration" || column.type === "date") &&
+                      needsValue &&
+                      (row.filter.kind === "number" ||
+                        row.filter.kind === "duration" ||
+                        row.filter.kind === "date") ? (
+                        <>
+                          <input
+                            className="field"
+                            type={column.type === "date" ? "date" : "text"}
+                            value={row.filter.value}
+                            placeholder="Value"
+                            onChange={(event) =>
+                              updateFilterRow(row.id, {
+                                filter: { ...row.filter, value: event.target.value },
+                              })
+                            }
+                          />
+                          {needsSecond ? (
+                            <input
+                              className="field"
+                              type={column.type === "date" ? "date" : "text"}
+                              value={row.filter.valueTo ?? ""}
+                              placeholder="To"
+                              onChange={(event) =>
+                                updateFilterRow(row.id, {
+                                  filter: { ...row.filter, valueTo: event.target.value },
+                                })
+                              }
+                            />
+                          ) : null}
+                        </>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label="Remove filter"
+                        onClick={() => setFilterRows((prev) => prev.filter((item) => item.id !== row.id))}
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          {error ? <p className="custom-view-error">{error}</p> : null}
+        </div>
+
+        <div className="pill-tabs" style={{ justifyContent: "flex-end", marginTop: 18 }}>
+          <button type="button" className="secondary-button" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="button" className="primary-button" onClick={handleSave}>
+            Save
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function QuickCreateModal({
   title,
   fields,
@@ -2530,9 +3377,17 @@ function LeadTimeline() {
   );
 }
 
+const COLUMN_WIDTH_OVERRIDES: Record<string, number> = {
+  stage: 118,
+  facilityNumber: 124,
+};
+
 function getDefaultColumnWidths(columns: ColumnDef[], dataWidth = 180) {
   return Object.fromEntries(
-    columns.map((column) => [column.key, column.type === "checkbox" ? 72 : dataWidth]),
+    columns.map((column) => {
+      if (column.type === "checkbox") return [column.key, 72];
+      return [column.key, COLUMN_WIDTH_OVERRIDES[column.key] ?? dataWidth];
+    }),
   ) as Record<string, number>;
 }
 
@@ -2826,6 +3681,7 @@ function ResizableTable({
   onSortChange,
   onFilterChange,
   onColumnsReorder,
+  showRowExpandSlot = false,
 }: {
   columns: ColumnDef[];
   children: React.ReactNode;
@@ -2835,6 +3691,7 @@ function ResizableTable({
   onSortChange: (next: SortState) => void;
   onFilterChange: (key: string, next: ColumnFilter | undefined) => void;
   onColumnsReorder: (next: ColumnDef[]) => void;
+  showRowExpandSlot?: boolean;
 }) {
   const columnsIdentity = useMemo(
     () =>
@@ -2858,9 +3715,18 @@ function ResizableTable({
   useEffect(() => {
     setWidths((prev) => {
       const defaults = getDefaultColumnWidths(columns, dataWidth);
+      if (showRowExpandSlot && defaults.select != null) {
+        defaults.select = 84;
+      }
       const next: Record<string, number> = {};
       for (const column of columns) {
         next[column.key] = prev[column.key] ?? defaults[column.key];
+      }
+      if (showRowExpandSlot) {
+        next.select = 84;
+      }
+      for (const [key, width] of Object.entries(COLUMN_WIDTH_OVERRIDES)) {
+        if (next[key] != null) next[key] = width;
       }
       return next;
     });
@@ -2871,7 +3737,7 @@ function ResizableTable({
     setDragKey(null);
     setDropKey(null);
     dragRef.current = null;
-  }, [columnsIdentity, dataWidth, columns]);
+  }, [columnsIdentity, dataWidth, columns, showRowExpandSlot]);
 
   useEffect(() => {
     if (!dragKey) return;
@@ -3010,8 +3876,8 @@ function ResizableTable({
           event.currentTarget.style.setProperty("--table-scroll-left", `${event.currentTarget.scrollLeft}px`);
         }}
       >
-        <div className="table-resize-plane" style={{ width: tableWidth, minWidth: tableWidth }}>
-          <table className="list-table list-table-header" style={{ width: tableWidth, minWidth: tableWidth }}>
+        <div className="table-resize-plane" style={{ width: "100%", minWidth: tableWidth }}>
+          <table className="list-table list-table-header" style={{ width: "100%", minWidth: tableWidth }}>
             {renderColgroup()}
             <thead>
               <tr>
@@ -3053,7 +3919,7 @@ function ResizableTable({
                       }}
                     >
                       {column.type === "checkbox" ? (
-                        <HeaderSelectCheckbox />
+                        <HeaderSelectCheckbox showExpandSlot={showRowExpandSlot} />
                       ) : (
                         <div className="th-content">
                           <span
@@ -3129,7 +3995,7 @@ function ResizableTable({
             </thead>
           </table>
           <div className="table-body-scroll">
-            <table className="list-table list-table-body" style={{ width: tableWidth, minWidth: tableWidth }}>
+            <table className="list-table list-table-body" style={{ width: "100%", minWidth: tableWidth }}>
               {renderColgroup()}
               {children}
             </table>
@@ -3247,6 +4113,8 @@ function RecordListShell<T extends { id: string }>({
   importLabel,
   onImport,
   onExport,
+  showRowExpandSlot = false,
+  listModuleKey,
 }: {
   title: string;
   filters: string[];
@@ -3261,6 +4129,8 @@ function RecordListShell<T extends { id: string }>({
   onImport?: () => void;
   /** Receives the rows currently visible in the table, after sort and filters. */
   onExport?: (rows: T[]) => void;
+  showRowExpandSlot?: boolean;
+  listModuleKey?: ModuleKey;
 }) {
   const columnsIdentity = useMemo(
     () =>
@@ -3273,6 +4143,7 @@ function RecordListShell<T extends { id: string }>({
   const [refreshing, setRefreshing] = useState(false);
   const [sort, setSort] = useState<SortState>(null);
   const [columnFilters, setColumnFilters] = useState<ColumnFilters>({});
+  const [appliedRelatedRules, setAppliedRelatedRules] = useState<RelatedModuleRule[]>([]);
   const [page, setPage] = useState(1);
   const pageSize = 50;
 
@@ -3280,9 +4151,18 @@ function RecordListShell<T extends { id: string }>({
     setOrderedColumns(columns);
   }, [columnsIdentity, columns]);
 
+  useEffect(() => {
+    setAppliedRelatedRules([]);
+  }, [listModuleKey]);
+
+  const relatedFilteredRows = useMemo(
+    () => applyRelatedModuleFilters(data, listModuleKey, appliedRelatedRules),
+    [data, listModuleKey, appliedRelatedRules],
+  );
+
   const visibleRows = useMemo(
-    () => applyColumnSortFilter(data, orderedColumns, sort, columnFilters, getCellValue),
-    [data, orderedColumns, sort, columnFilters, getCellValue],
+    () => applyColumnSortFilter(relatedFilteredRows, orderedColumns, sort, columnFilters, getCellValue),
+    [relatedFilteredRows, orderedColumns, sort, columnFilters, getCellValue],
   );
 
   const total = visibleRows.length;
@@ -3298,7 +4178,7 @@ function RecordListShell<T extends { id: string }>({
   const allIds = useMemo(() => data.map((row) => row.id), [data]);
   useEffect(() => {
     setPage(1);
-  }, [sort, columnFilters, data]);
+  }, [sort, columnFilters, data, appliedRelatedRules]);
 
   const actionsHost = useContext(ModuleViewActionsHostContext);
   const { filtersOpen } = useContext(ModuleFilterPanelContext);
@@ -3336,15 +4216,12 @@ function RecordListShell<T extends { id: string }>({
         </button>
       ) : null}
       <button
-        className={`icon-button ${refreshing ? "is-refreshing" : ""}`}
+        className={`icon-button is-borderless ${refreshing ? "is-refreshing" : ""}`}
         aria-label="Refresh"
         onClick={handleRefresh}
         disabled={refreshing}
       >
         <RefreshCcw size={16} />
-      </button>
-      <button className="icon-button" aria-label="More actions">
-        <MoreHorizontal size={16} />
       </button>
     </>
   );
@@ -3352,7 +4229,24 @@ function RecordListShell<T extends { id: string }>({
   return (
     <div className={`record-layout ${filtersOpen ? "" : "is-filters-hidden"}`}>
       {filtersOpen ? (
-        <FilterPanel title={`Filter ${title.replace("All ", "")} by`} filters={filters} />
+        <FilterPanel
+          title={`Filter ${title.replace("All ", "")} by`}
+          filters={filters}
+          filterColumns={orderedColumns.filter((column) => column.type !== "checkbox" && isColumnFilterable(column))}
+          columnFilters={columnFilters}
+          onColumnFilterChange={(key, next) => {
+            setColumnFilters((prev) => {
+              const copy = { ...prev };
+              if (!next) delete copy[key];
+              else copy[key] = next;
+              return copy;
+            });
+          }}
+          moduleKey={listModuleKey}
+          appliedRelatedRules={appliedRelatedRules}
+          onApplyRelatedRules={setAppliedRelatedRules}
+          onClearRelatedRules={() => setAppliedRelatedRules([])}
+        />
       ) : null}
       <section className="list-shell">
         {actionsHost
@@ -3366,6 +4260,7 @@ function RecordListShell<T extends { id: string }>({
               columns={orderedColumns}
               sort={sort}
               filters={columnFilters}
+              showRowExpandSlot={showRowExpandSlot}
               onSortChange={setSort}
               onColumnsReorder={setOrderedColumns}
               onFilterChange={(key, next) => {
@@ -3421,27 +4316,73 @@ function RecordListShell<T extends { id: string }>({
   );
 }
 
-function FilterPanel({ title, filters }: { title: string; filters: string[] }) {
+function filterLabelsToColumns(labels: string[]): ColumnDef[] {
+  return labels.map((label, index) => ({
+    key: `sidebar-filter-${index}`,
+    header: label,
+    type: "text",
+  }));
+}
+
+function FilterPanel({
+  title,
+  filters,
+  filterColumns,
+  columnFilters = {},
+  onColumnFilterChange,
+  moduleKey,
+  appliedRelatedRules = [],
+  onApplyRelatedRules,
+  onClearRelatedRules,
+}: {
+  title: string;
+  filters: string[];
+  filterColumns?: ColumnDef[];
+  columnFilters?: ColumnFilters;
+  onColumnFilterChange?: (key: string, next: ColumnFilter | undefined) => void;
+  moduleKey?: ModuleKey;
+  appliedRelatedRules?: RelatedModuleRule[];
+  onApplyRelatedRules?: (rules: RelatedModuleRule[]) => void;
+  onClearRelatedRules?: () => void;
+}) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const sidebarColumns = filterColumns ?? filterLabelsToColumns(filters);
+
   return (
     <aside className="filter-panel">
       <strong>{title}</strong>
-      <input className="filter-search" placeholder="Search" style={{ marginTop: 12 }} />
-      <div className="filter-group">
-        <strong>System Defined Filters</strong>
-        {systemFilters.map((filter) => (
-          <label className="filter-option" key={filter}>
-            <input type="checkbox" /> {filter}
-          </label>
-        ))}
-      </div>
-      <div className="filter-group">
-        <strong>Filter By Fields</strong>
-        {filters.map((filter) => (
-          <label className="filter-option" key={filter}>
-            <input type="checkbox" /> {filter}
-          </label>
-        ))}
-      </div>
+      <input
+        className="filter-search"
+        placeholder="Search"
+        style={{ marginTop: 12 }}
+        value={searchQuery}
+        onChange={(event) => setSearchQuery(event.target.value)}
+      />
+      {onColumnFilterChange ? (
+        <FieldFilterSection
+          columns={sidebarColumns}
+          filters={columnFilters}
+          searchQuery={searchQuery}
+          onFilterChange={onColumnFilterChange}
+        />
+      ) : (
+        <div className="filter-group field-filter-group">
+          <strong>Filter By Fields</strong>
+          {filters.map((filter) => (
+            <label className="filter-option" key={filter}>
+              <input type="checkbox" /> {filter}
+            </label>
+          ))}
+        </div>
+      )}
+      {moduleKey && onApplyRelatedRules && onClearRelatedRules ? (
+        <RelatedModuleFilterSection
+          moduleKey={moduleKey}
+          appliedRules={appliedRelatedRules}
+          onApply={onApplyRelatedRules}
+          onClear={onClearRelatedRules}
+        />
+      ) : null}
     </aside>
   );
 }
@@ -4732,7 +5673,17 @@ function AccountsWorkspace({
   const [editing, setEditing] = useState<{ account: Account; mode: "create" | "edit" } | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [returnToHome, setReturnToHome] = useState(false);
+  const [appliedRelatedRules, setAppliedRelatedRules] = useState<RelatedModuleRule[]>([]);
+  const [sidebarColumnFilters, setSidebarColumnFilters] = useState<ColumnFilters>({});
   const viewRows = view === "Active Clients" ? rows.filter((account) => account.status === "Active") : rows;
+  const relatedFilteredRows = useMemo(
+    () => applyRelatedModuleFilters(viewRows, "accounts", appliedRelatedRules),
+    [viewRows, appliedRelatedRules],
+  );
+  const filteredViewRows = useMemo(
+    () => applyColumnSortFilter(relatedFilteredRows, accountColumns, null, sidebarColumnFilters, getAccountCellValue),
+    [relatedFilteredRows, sidebarColumnFilters],
+  );
   const { activeTab } = useContext(ModuleViewTabContext);
   const actionsHost = useContext(ModuleViewActionsHostContext);
   const { filtersOpen } = useContext(ModuleFilterPanelContext);
@@ -4847,10 +5798,24 @@ function AccountsWorkspace({
             <FilterPanel
               title="Filter Clients by"
               filters={["Company Name", "Status", "Client Status", "Segment", "Risk Rating", "Region"]}
+              filterColumns={accountColumns.filter((column) => column.type !== "checkbox" && isColumnFilterable(column))}
+              columnFilters={sidebarColumnFilters}
+              onColumnFilterChange={(key, next) => {
+                setSidebarColumnFilters((prev) => {
+                  const copy = { ...prev };
+                  if (!next) delete copy[key];
+                  else copy[key] = next;
+                  return copy;
+                });
+              }}
+              moduleKey="accounts"
+              appliedRelatedRules={appliedRelatedRules}
+              onApplyRelatedRules={setAppliedRelatedRules}
+              onClearRelatedRules={() => setAppliedRelatedRules([])}
             />
           ) : null}
           <ClientKanbanBoard
-            clients={viewRows}
+            clients={filteredViewRows}
             onOpenClient={(client) => {
               setEditing({ account: { ...client }, mode: "edit" });
               setReturnToHome(false);
@@ -4866,6 +5831,7 @@ function AccountsWorkspace({
     <>
       <RecordListShell
         title={view}
+        listModuleKey="accounts"
         filters={[
           "Company Name",
           "Status",
@@ -6295,6 +7261,11 @@ function LoanFormPage({
 
 function DealsWorkspace({
   moduleKey = "deals",
+  view = LOAN_PUBLIC_VIEWS[0],
+  viewLabel,
+  publicViews = [],
+  customViews = [],
+  currentOwner = null,
   createIntentId = null,
   onCreateHandled,
   openRecordIntent = null,
@@ -6302,6 +7273,11 @@ function DealsWorkspace({
   onReturnHome,
 }: {
   moduleKey?: ProductPipelineModuleKey;
+  view?: string;
+  viewLabel?: string;
+  publicViews?: LoanPublicViewItem[];
+  customViews?: LoanCustomView[];
+  currentOwner?: string | null;
   createIntentId?: number | null;
   onCreateHandled?: () => void;
   openRecordIntent?: OpenRecordIntent | null;
@@ -6309,7 +7285,23 @@ function DealsWorkspace({
   onReturnHome?: () => void;
 }) {
   const config = PRODUCT_PIPELINE_CONFIGS[moduleKey];
-  const columns = useMemo(() => buildDealColumns(config), [config]);
+  const allColumns = useMemo(() => buildDealColumns(config), [config]);
+  const activeCustomView = useMemo(
+    () => (moduleKey === "deals" ? customViews.find((item) => item.id === view) ?? null : null),
+    [customViews, moduleKey, view],
+  );
+  const activePublicView = useMemo(
+    () => (moduleKey === "deals" ? publicViews.find((item) => item.id === view) ?? null : null),
+    [publicViews, moduleKey, view],
+  );
+  const activeViewFields =
+    activeCustomView?.visibleFields ??
+    (activePublicView?.visibleFields?.length ? activePublicView.visibleFields : null);
+  const columns = useMemo(() => {
+    if (!activeViewFields) return allColumns;
+    const selected = new Set(activeViewFields);
+    return allColumns.filter((column) => column.key === "select" || selected.has(column.key));
+  }, [activeViewFields, allColumns]);
   const filters = useMemo(() => buildDealFilters(config), [config]);
   const kanbanFilters = useMemo(() => buildKanbanDealFilters(config), [config]);
   const { activeTab } = useContext(ModuleViewTabContext);
@@ -6320,6 +7312,9 @@ function DealsWorkspace({
   const [editing, setEditing] = useState<Deal | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [returnToHome, setReturnToHome] = useState(false);
+  const [expandedLoanIds, setExpandedLoanIds] = useState<Set<string>>(() => new Set());
+  const [appliedRelatedRules, setAppliedRelatedRules] = useState<RelatedModuleRule[]>([]);
+  const [sidebarColumnFilters, setSidebarColumnFilters] = useState<ColumnFilters>({});
   const facilityCountByLoanId = useMemo(() => {
     if (moduleKey !== "deals") return null;
     const counts = new Map<string, number>();
@@ -6328,6 +7323,50 @@ function DealsWorkspace({
     }
     return counts;
   }, [moduleKey]);
+  const facilitiesByLoanId = useMemo(() => {
+    if (moduleKey !== "deals") return null;
+    const map = new Map<string, LoanFacility[]>();
+    for (const facility of loanFacilities) {
+      const list = map.get(facility.loanId) ?? [];
+      list.push(facility);
+      map.set(facility.loanId, list);
+    }
+    return map;
+  }, [moduleKey]);
+
+  function toggleLoanFacilities(loanId: string) {
+    setExpandedLoanIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(loanId)) next.delete(loanId);
+      else next.add(loanId);
+      return next;
+    });
+  }
+  const viewRows = useMemo(() => {
+    if (moduleKey !== "deals") return dealRows;
+    if (activeCustomView) {
+      return applyLoanCustomViewFilters(dealRows, activeCustomView, allColumns, getDealCellValue);
+    }
+    if (activePublicView?.useColumnFilters) {
+      return applyLoanCustomViewFilters(
+        dealRows,
+        {
+          id: activePublicView.id,
+          name: activePublicView.name,
+          visibleFields: activePublicView.visibleFields ?? defaultLoanVisibleFields(allColumns),
+          filters: activePublicView.filters ?? {},
+        },
+        allColumns,
+        getDealCellValue,
+      );
+    }
+    return filterLoansByView(dealRows, view, { currentOwner });
+  }, [dealRows, view, currentOwner, moduleKey, activeCustomView, activePublicView, allColumns]);
+  const filteredViewRows = useMemo(() => {
+    const columnFiltered = applyColumnSortFilter(viewRows, allColumns, null, sidebarColumnFilters, getDealCellValue);
+    return applyRelatedModuleFilters(columnFiltered, moduleKey, appliedRelatedRules);
+  }, [viewRows, allColumns, sidebarColumnFilters, moduleKey, appliedRelatedRules]);
+  const listTitle = moduleKey === "deals" ? (viewLabel ?? view) : `All ${config.label}`;
 
   // The shared store needs the resolved rows, so track them in a ref rather than
   // reading the render-scoped state, which would drop batched updates.
@@ -6379,6 +7418,7 @@ function DealsWorkspace({
 
   function renderDealCell(deal: Deal, column: ColumnDef) {
     if (column.key === "select") {
+      const facilityCount = facilityCountByLoanId?.get(deal.id) ?? 0;
       return (
         <RowSelectCell
           context={{
@@ -6392,6 +7432,15 @@ function DealsWorkspace({
             setReturnToHome(false);
           }}
           onDelete={() => commitDealRows((prev) => prev.filter((item) => item.id !== deal.id))}
+          expand={
+            moduleKey === "deals"
+              ? {
+                  visible: facilityCount > 0,
+                  expanded: expandedLoanIds.has(deal.id),
+                  onToggle: () => toggleLoanFacilities(deal.id),
+                }
+              : undefined
+          }
         />
       );
     }
@@ -6460,17 +7509,34 @@ function DealsWorkspace({
                   }}
                   onImport={() => setImportOpen(true)}
                 />
-                <LoanStageBar loans={dealRows} stages={config.stages} ariaLabel={`${config.label} stages`} />
+                <LoanStageBar loans={filteredViewRows} stages={config.stages} ariaLabel={`${config.label} stages`} />
               </>,
               actionsHost,
             )
           : null}
         <div className={`record-layout ${filtersOpen ? "" : "is-filters-hidden"}`}>
           {filtersOpen ? (
-            <FilterPanel title={`Filter ${config.label} by`} filters={kanbanFilters} />
+            <FilterPanel
+              title={`Filter ${config.label} by`}
+              filters={kanbanFilters}
+              filterColumns={allColumns.filter((column) => column.type !== "checkbox" && isColumnFilterable(column))}
+              columnFilters={sidebarColumnFilters}
+              onColumnFilterChange={(key, next) => {
+                setSidebarColumnFilters((prev) => {
+                  const copy = { ...prev };
+                  if (!next) delete copy[key];
+                  else copy[key] = next;
+                  return copy;
+                });
+              }}
+              moduleKey={moduleKey}
+              appliedRelatedRules={appliedRelatedRules}
+              onApplyRelatedRules={setAppliedRelatedRules}
+              onClearRelatedRules={() => setAppliedRelatedRules([])}
+            />
           ) : null}
           <LoanKanbanBoard
-            loans={dealRows}
+            loans={filteredViewRows}
             stages={config.stages}
             onOpenLoan={(loan) => {
               setCreating(false);
@@ -6487,13 +7553,15 @@ function DealsWorkspace({
   return (
     <>
       <RecordListShell
-        title={`All ${config.label}`}
+        title={listTitle}
+        listModuleKey={moduleKey}
         filters={filters}
-        data={dealRows}
+        data={viewRows}
         columns={columns}
         getCellValue={getDealCellValue}
         createLabel={`Create ${config.recordLabel}`}
         importLabel={`Import ${config.label}`}
+        showRowExpandSlot={moduleKey === "deals"}
         onCreate={() => {
           setEditing(null);
           setCreating(true);
@@ -6503,51 +7571,100 @@ function DealsWorkspace({
         onExport={(rows) => exportDeals(config, rows)}
         renderRows={(visibleRows, orderedColumns) => (
           <tbody>
-            {visibleRows.map((deal) => (
-              <tr
-                key={deal.id}
-                className="is-row-interactive"
-                onDoubleClick={() => {
-                  setCreating(false);
-                  setEditing({ ...deal });
-                  setReturnToHome(false);
-                }}
-              >
-                {orderedColumns.map((column) => {
-                  if (column.key === "select") {
-                    return (
-                      <td key={column.key} className="is-row-actions-col">
-                        {renderDealCell(deal, column)}
-                      </td>
-                    );
-                  }
-                  if (column.key === "name" && facilityCountByLoanId) {
-                    const facilityCount = facilityCountByLoanId.get(deal.id) ?? 0;
-                    return (
-                      <td key={column.key}>
-                        <span className="loan-name-with-count">
-                          {deal.name}
-                          {facilityCount > 0 ? (
-                            <span
-                              className="loan-facility-count"
-                              title={`${facilityCount} Loan Facilit${facilityCount === 1 ? "y" : "ies"}`}
-                            >
-                              {facilityCount}
+            {visibleRows.map((deal) => {
+              const facilities = facilitiesByLoanId?.get(deal.id) ?? [];
+              const expanded = expandedLoanIds.has(deal.id) && facilities.length > 0;
+              return (
+                <Fragment key={deal.id}>
+                  <tr
+                    className={`is-row-interactive ${expanded ? "is-facility-expanded" : ""}`}
+                    onDoubleClick={() => {
+                      setCreating(false);
+                      setEditing({ ...deal });
+                      setReturnToHome(false);
+                    }}
+                  >
+                    {orderedColumns.map((column) => {
+                      if (column.key === "select") {
+                        return (
+                          <td key={column.key} className="is-row-actions-col">
+                            {renderDealCell(deal, column)}
+                          </td>
+                        );
+                      }
+                      if (column.key === "name" && facilityCountByLoanId) {
+                        const facilityCount = facilityCountByLoanId.get(deal.id) ?? 0;
+                        return (
+                          <td key={column.key}>
+                            <span className="loan-name-with-count">
+                              {deal.name}
+                              {facilityCount > 0 ? (
+                                <span
+                                  className="loan-facility-count"
+                                  title={`${facilityCount} Loan Facilit${facilityCount === 1 ? "y" : "ies"}`}
+                                >
+                                  {facilityCount}
+                                </span>
+                              ) : null}
                             </span>
-                          ) : null}
-                        </span>
+                          </td>
+                        );
+                      }
+                      if (column.type === "enum" && column.colorable !== false) {
+                        const raw = deal[column.key as keyof Deal];
+                        const value = raw == null || raw === "" ? null : String(raw);
+                        return <EnumFillTd key={column.key} column={column} value={value} />;
+                      }
+                      return <td key={column.key}>{renderDealCell(deal, column)}</td>;
+                    })}
+                  </tr>
+                  {expanded ? (
+                    <tr className="loan-facility-expand-row">
+                      <td colSpan={orderedColumns.length}>
+                        <div className="loan-facility-nested">
+                          <div className="loan-facility-nested-scroll">
+                            <table className="loan-facility-table">
+                              <thead>
+                                <tr>
+                                  <th>Facility Name</th>
+                                  <th>Tranche</th>
+                                  <th>Facility Type</th>
+                                  <th>Amount</th>
+                                  <th>Status</th>
+                                  <th>Green Loan Indicator</th>
+                                  <th>SLL Indicator</th>
+                                  <th>Credit Connect Indicator</th>
+                                  <th>New Industry Sector</th>
+                                  <th>Deal Type</th>
+                                  <th>Loan Currency</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {facilities.map((facility) => (
+                                  <tr key={facility.id}>
+                                    <td>{facility.name}</td>
+                                    <td>{facility.tranche}</td>
+                                    <td>{facility.facilityType}</td>
+                                    <td>{formatLoanAmount(facility.currency, facility.amount)}</td>
+                                    <td>{facility.status}</td>
+                                    <td>{facility.greenLoanIndicator}</td>
+                                    <td>{facility.sllIndicator}</td>
+                                    <td>{facility.creditConnectIndicator}</td>
+                                    <td>{facility.newIndustrySector}</td>
+                                    <td>{facility.dealType}</td>
+                                    <td>{facility.currency}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
                       </td>
-                    );
-                  }
-                  if (column.type === "enum" && column.colorable !== false) {
-                    const raw = deal[column.key as keyof Deal];
-                    const value = raw == null || raw === "" ? null : String(raw);
-                    return <EnumFillTd key={column.key} column={column} value={value} />;
-                  }
-                  return <td key={column.key}>{renderDealCell(deal, column)}</td>;
-                })}
-              </tr>
-            ))}
+                    </tr>
+                  ) : null}
+                </Fragment>
+              );
+            })}
           </tbody>
         )}
       />
