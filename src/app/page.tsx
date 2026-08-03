@@ -1810,10 +1810,7 @@ function HomeDashboard({
   const quickAccessPanel = useHomePanel(expandedPanel === "quickAccess", (next) =>
     onExpandedPanelChange(next ? "quickAccess" : null),
   );
-  const allAttentionItems = useMemo(() => buildAttentionItems(), []);
-  const attentionLimit = attentionPanel.expanded ? 60 : 8;
-  const attentionItems = allAttentionItems.slice(0, attentionLimit);
-  const attentionTotal = allAttentionItems.length;
+  const attentionItems = useMemo(() => buildAttentionItems(), []);
   const quickAccessItems = useMemo(() => {
     const kycActions = accounts.filter(
       (account) =>
@@ -1863,9 +1860,7 @@ function HomeDashboard({
                 <div className="home-quad-label">Needs attention</div>
                 <div className="home-quad-actions">
                   <span className="home-quad-meta">
-                    {attentionTotal === attentionItems.length
-                      ? `${attentionTotal} items`
-                      : `${attentionItems.length} of ${attentionTotal} items`}
+                    {attentionItems.length} items
                   </span>
                   <HomePanelExpandButton
                     expanded={attentionPanel.expanded}
@@ -3211,6 +3206,7 @@ const CLIENT_CHANNEL_OPTIONS: ContactPreferredChannel[] = [
   "In-Person",
   "WeChat / Instant Message",
 ];
+const YES_NO_OPTIONS = ["Yes", "No"] as const;
 
 function optionSlug(option: string) {
   return option
@@ -3334,16 +3330,34 @@ const accountColumns: ColumnDef[] = [
     header: "Preferred Channels",
     type: "text",
   },
-  { key: "phone", header: "Phone", type: "phone" },
-  { key: "email", header: "Email", type: "email" },
+  { key: "phone", header: "Company Phone 1", type: "phone" },
+  { key: "phone2", header: "Company Phone 2", type: "phone" },
+  { key: "email", header: "Company Email", type: "email" },
   { key: "sicCode", header: "SIC Code", type: "text" },
   {
     key: "industry",
-    header: "Industry",
+    header: "Industry Name",
     type: "enum",
     enumOptions: [...INDUSTRY_OPTIONS],
     colorable: false,
   },
+  {
+    key: "creIndicator",
+    header: "CRE Indicator",
+    type: "enum",
+    enumOptions: [...YES_NO_OPTIONS],
+    colorable: false,
+  },
+  { key: "countryRegionCampaignCode", header: "Country/Region/Campaign Code", type: "text" },
+  { key: "referralDate", header: "Referral Date", type: "date" },
+  {
+    key: "existingClientReferral",
+    header: "Existing Client Referral",
+    type: "enum",
+    enumOptions: [...YES_NO_OPTIONS],
+    colorable: false,
+  },
+  { key: "hacnBuddyingRegionBranch", header: "HACN Buddying Region/Branch", type: "text" },
   {
     key: "rating",
     header: "Rating",
@@ -3386,6 +3400,7 @@ const accountColumns: ColumnDef[] = [
 function getAccountCellValue(account: Account, key: string) {
   const value = account[key as keyof Account];
   if (value == null) return "";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
   if (Array.isArray(value)) return value.join(", ");
   return value;
 }
@@ -3398,10 +3413,16 @@ function createEmptyAccount(): Account {
     clientStatus: "ETB",
     relationshipManager: "",
     phone: "",
+    phone2: "",
     email: "",
     website: "",
     sicCode: "",
     industry: null,
+    creIndicator: null,
+    countryRegionCampaignCode: "",
+    referralDate: "",
+    existingClientReferral: null,
+    hacnBuddyingRegionBranch: "",
     rating: null,
     segment: null,
     riskRating: null,
@@ -3421,6 +3442,16 @@ function createEmptyAccount(): Account {
     productsOfInterest: [],
     preferredChannels: [],
   };
+}
+
+function yesNoValue(value: boolean | null): "Yes" | "No" | null {
+  if (value === null) return null;
+  return value ? "Yes" : "No";
+}
+
+function parseYesNo(value: "Yes" | "No" | null): boolean | null {
+  if (value === null) return null;
+  return value === "Yes";
 }
 
 function primaryIdTypeClass(type: PrimaryIdType) {
@@ -3987,10 +4018,10 @@ function ClientFormPage({
       </header>
 
       <div className="client-form-body">
-        <section className="client-form-section">
+        <section className={`client-form-section ${clientStatusError ? "is-invalid" : ""}`}>
           <div className="client-form-section-head">
-            <strong>Company</strong>
-            <span>Basic client details</span>
+            <strong>Overview</strong>
+            <span>Core client identity and referral details</span>
           </div>
           <div className="client-form-grid">
             <div className={`form-row ${companyNameError ? "is-invalid" : ""}`}>
@@ -4000,7 +4031,6 @@ function ClientFormPage({
               <input
                 id="client-company-name"
                 className={`field ${companyNameError ? "is-invalid" : ""}`}
-                placeholder="Enter company name"
                 value={draft.companyName}
                 aria-required="true"
                 aria-invalid={companyNameError}
@@ -4009,79 +4039,134 @@ function ClientFormPage({
               {companyNameError ? <p className="field-error">Company Name is required.</p> : null}
             </div>
             <div className="form-row">
-              <label htmlFor="client-rm">Relationship Manager</label>
-              <input
-                id="client-rm"
-                className="field"
-                placeholder="Enter relationship manager name"
-                value={draft.relationshipManager}
-                onChange={(event) => update("relationshipManager", event.target.value)}
-              />
-            </div>
-            <div className="form-row">
-              <label htmlFor="client-phone">Phone</label>
-              <input
-                id="client-phone"
-                className="field"
-                type="tel"
-                placeholder="Enter phone number"
-                value={draft.phone}
-                onChange={(event) => update("phone", event.target.value)}
-              />
-            </div>
-            <div className="form-row">
-              <label htmlFor="client-email">Email</label>
-              <input
-                id="client-email"
-                className="field"
-                type="email"
-                placeholder="Enter email"
-                value={draft.email}
-                onChange={(event) => update("email", event.target.value)}
-              />
-            </div>
-            <div className="form-row">
-              <label htmlFor="client-website">Website</label>
-              <input
-                id="client-website"
-                className="field"
-                placeholder="https://"
-                value={draft.website}
-                onChange={(event) => update("website", event.target.value)}
-              />
-            </div>
-            <div className="form-row">
               <label htmlFor="client-sic">SIC Code</label>
               <input
                 id="client-sic"
                 className="field"
-                placeholder="Enter SIC code"
                 value={draft.sicCode}
                 onChange={(event) => update("sicCode", event.target.value)}
               />
             </div>
             <div className="form-row">
-              <label htmlFor="client-parent-group">Parent Group</label>
-              <input
-                id="client-parent-group"
-                className="field"
-                placeholder="Enter parent group"
-                value={draft.parentGroup}
-                onChange={(event) => update("parentGroup", event.target.value)}
+              <label>Industry Name</label>
+              <ChoiceField
+                name="industry"
+                options={INDUSTRY_OPTIONS}
+                value={draft.industry}
+                onChange={(next) => update("industry", next)}
+                ariaLabel="Industry Name"
+                placeholder=""
               />
             </div>
             <div className="form-row">
-              <label htmlFor="client-since">Client Since</label>
+              <label>
+                Client Status <span className="field-required">*</span>
+              </label>
+              <ChoiceField
+                name="clientStatus"
+                options={CLIENT_STATUS_OPTIONS}
+                value={draft.clientStatus}
+                onChange={(next) => update("clientStatus", next)}
+                ariaLabel="Client Status"
+                invalid={clientStatusError}
+                groupClassName="choice-group-status"
+                getOptionClass={(option) => `choice-chip-status-${option.toLowerCase()}`}
+                placeholder=""
+              />
+              {clientStatusError ? <p className="field-error">Client Status is required.</p> : null}
+            </div>
+            <div className="form-row">
+              <label>Commercial Real Estate (CRE) Indicator</label>
+              <ChoiceField
+                name="creIndicator"
+                options={[...YES_NO_OPTIONS]}
+                value={yesNoValue(draft.creIndicator)}
+                onChange={(next) => update("creIndicator", parseYesNo(next))}
+                ariaLabel="Commercial Real Estate (CRE) Indicator"
+                placeholder=""
+              />
+            </div>
+            <div className="form-row">
+              <label htmlFor="client-rm">Relationship Manager</label>
+              <input
+                id="client-rm"
+                className="field"
+                value={draft.relationshipManager}
+                onChange={(event) => update("relationshipManager", event.target.value)}
+              />
+            </div>
+            <div className="form-row">
+              <label htmlFor="client-email">Company Email</label>
+              <input
+                id="client-email"
+                className="field"
+                type="email"
+                value={draft.email}
+                onChange={(event) => update("email", event.target.value)}
+              />
+            </div>
+            <div className="form-row">
+              <label htmlFor="client-phone">Company Phone 1</label>
+              <input
+                id="client-phone"
+                className="field"
+                type="tel"
+                value={draft.phone}
+                onChange={(event) => update("phone", event.target.value)}
+              />
+            </div>
+            <div className="form-row">
+              <label htmlFor="client-phone-2">Company Phone 2</label>
+              <input
+                id="client-phone-2"
+                className="field"
+                type="tel"
+                value={draft.phone2}
+                onChange={(event) => update("phone2", event.target.value)}
+              />
+            </div>
+            <div className="form-row">
+              <label htmlFor="client-campaign-code">Country/Region/Campaign Code</label>
+              <input
+                id="client-campaign-code"
+                className="field"
+                value={draft.countryRegionCampaignCode}
+                onChange={(event) => update("countryRegionCampaignCode", event.target.value)}
+              />
+            </div>
+            <div className="form-row">
+              <label htmlFor="client-referral-date">Referral Date</label>
               <DateField
-                id="client-since"
-                value={draft.clientSince}
-                onChange={(value) => update("clientSince", value)}
+                id="client-referral-date"
+                value={draft.referralDate}
+                onChange={(value) => update("referralDate", value)}
+                placeholder=""
+              />
+            </div>
+            <div className="form-row">
+              <label>Existing Client Referral</label>
+              <ChoiceField
+                name="existingClientReferral"
+                options={[...YES_NO_OPTIONS]}
+                value={yesNoValue(draft.existingClientReferral)}
+                onChange={(next) => update("existingClientReferral", parseYesNo(next))}
+                ariaLabel="Existing Client Referral"
+                placeholder=""
+              />
+            </div>
+            <div className="form-row">
+              <label htmlFor="client-hacn-buddying">HACN Buddying Region/Branch</label>
+              <input
+                id="client-hacn-buddying"
+                className="field"
+                value={draft.hacnBuddyingRegionBranch}
+                onChange={(event) => update("hacnBuddyingRegionBranch", event.target.value)}
               />
             </div>
           </div>
         </section>
 
-        <section className={`client-form-section ${statusError || clientStatusError ? "is-invalid" : ""}`}>
+        <section className={`client-form-section ${statusError ? "is-invalid" : ""}`}>
           <div className="client-form-section-head">
             <strong>
               Status <span className="field-required">*</span>
@@ -4101,24 +4186,9 @@ function ClientFormPage({
                 ariaLabel="Status"
                 invalid={statusError}
                 getOptionClass={(option) => `choice-chip-account-status choice-chip-account-status-${optionSlug(option)}`}
+                placeholder=""
               />
               {statusError ? <p className="field-error">Status is required.</p> : null}
-            </div>
-            <div className="form-row">
-              <label>
-                Client Status <span className="field-required">*</span>
-              </label>
-              <ChoiceField
-                name="clientStatus"
-                options={CLIENT_STATUS_OPTIONS}
-                value={draft.clientStatus}
-                onChange={(next) => update("clientStatus", next)}
-                ariaLabel="Client Status"
-                invalid={clientStatusError}
-                groupClassName="choice-group-status"
-                getOptionClass={(option) => `choice-chip-status-${option.toLowerCase()}`}
-              />
-              {clientStatusError ? <p className="field-error">Client Status is required.</p> : null}
             </div>
             <div className="form-row">
               <label>Segment</label>
@@ -4128,6 +4198,7 @@ function ClientFormPage({
                 value={draft.segment}
                 onChange={(next) => update("segment", next)}
                 ariaLabel="Segment"
+                placeholder=""
               />
             </div>
           </div>
@@ -4146,7 +4217,7 @@ function ClientFormPage({
                 value={draft.productsOfInterest}
                 onChange={(next) => update("productsOfInterest", next)}
                 ariaLabel="Products of Interest"
-                placeholder="Select products…"
+                placeholder=""
                 searchPlaceholder="Search products"
               />
             </div>
@@ -4157,7 +4228,7 @@ function ClientFormPage({
                 value={draft.preferredChannels}
                 onChange={(next) => update("preferredChannels", next)}
                 ariaLabel="Preferred Channels"
-                placeholder="Select channels…"
+                placeholder=""
                 searchPlaceholder="Search channels"
               />
             </div>
@@ -4167,19 +4238,9 @@ function ClientFormPage({
         <section className="client-form-section">
           <div className="client-form-section-head">
             <strong>Classification</strong>
-            <span>Industry, rating and risk</span>
+            <span>Rating and risk</span>
           </div>
           <div className="client-form-grid">
-            <div className="form-row">
-              <label>Industry</label>
-              <ChoiceField
-                name="industry"
-                options={INDUSTRY_OPTIONS}
-                value={draft.industry}
-                onChange={(next) => update("industry", next)}
-                ariaLabel="Industry"
-              />
-            </div>
             <div className="form-row">
               <label>Rating</label>
               <ChoiceField
@@ -4188,6 +4249,7 @@ function ClientFormPage({
                 value={draft.rating}
                 onChange={(next) => update("rating", next)}
                 ariaLabel="Rating"
+                placeholder=""
               />
             </div>
             <div className="form-row">
@@ -4207,6 +4269,7 @@ function ClientFormPage({
                 ariaLabel="KYC Status"
                 getOptionClass={(option) => `choice-chip-kyc choice-chip-kyc-${optionSlug(option)}`}
                 variant="labels"
+                placeholder=""
               />
             </div>
           </div>
@@ -4226,6 +4289,7 @@ function ClientFormPage({
                 value={draft.region}
                 onChange={(next) => update("region", next)}
                 ariaLabel="Region"
+                placeholder=""
               />
             </div>
             <div className="form-row">
@@ -4236,6 +4300,7 @@ function ClientFormPage({
                 value={draft.legalEntityType}
                 onChange={(next) => update("legalEntityType", next)}
                 ariaLabel="Legal Entity Type"
+                placeholder=""
               />
             </div>
             <div className="form-row">
@@ -4243,7 +4308,6 @@ function ClientFormPage({
               <input
                 id="client-country"
                 className="field"
-                placeholder="Enter country"
                 value={draft.country}
                 onChange={(event) => update("country", event.target.value)}
               />
@@ -4253,7 +4317,6 @@ function ClientFormPage({
               <input
                 id="client-city"
                 className="field"
-                placeholder="Enter city"
                 value={draft.city}
                 onChange={(event) => update("city", event.target.value)}
               />
@@ -4263,7 +4326,6 @@ function ClientFormPage({
               <input
                 id="client-address"
                 className="field"
-                placeholder="Enter address"
                 value={draft.address}
                 onChange={(event) => update("address", event.target.value)}
               />
@@ -4282,7 +4344,6 @@ function ClientFormPage({
               <input
                 id="client-annual-revenue"
                 className="field"
-                placeholder="e.g. HKD 120M"
                 value={draft.annualRevenue}
                 onChange={(event) => update("annualRevenue", event.target.value)}
               />
@@ -4292,7 +4353,6 @@ function ClientFormPage({
               <input
                 id="client-credit-limit"
                 className="field"
-                placeholder="e.g. HKD 20M"
                 value={draft.creditLimit}
                 onChange={(event) => update("creditLimit", event.target.value)}
               />
@@ -4302,7 +4362,6 @@ function ClientFormPage({
               <input
                 id="client-employees"
                 className="field"
-                placeholder="Enter employee count"
                 value={draft.employeeCount}
                 onChange={(event) => update("employeeCount", event.target.value)}
               />
@@ -4326,6 +4385,7 @@ function ClientFormPage({
                 ariaLabel="Primary ID Type"
                 groupClassName="choice-group-id-type"
                 getOptionClass={(option) => `choice-chip-id-${primaryIdTypeClass(option)}`}
+                placeholder=""
               />
             </div>
             <div className="form-row">
@@ -4333,7 +4393,6 @@ function ClientFormPage({
               <input
                 id="client-primary-id-number"
                 className="field"
-                placeholder="Enter primary ID number"
                 value={draft.primaryIdNumber}
                 onChange={(event) => update("primaryIdNumber", event.target.value)}
               />

@@ -102,11 +102,21 @@ export type Account = {
   status: AccountStatus;
   clientStatus: ClientStatus;
   relationshipManager: string;
+  /** Company Phone 1 */
   phone: string;
+  /** Company Phone 2 */
+  phone2: string;
+  /** Company Email */
   email: string;
   website: string;
   sicCode: string;
   industry: ClientIndustry | null;
+  /** Commercial Real Estate (CRE) Indicator */
+  creIndicator: boolean | null;
+  countryRegionCampaignCode: string;
+  referralDate: string;
+  existingClientReferral: boolean | null;
+  hacnBuddyingRegionBranch: string;
   rating: ClientRating | null;
   segment: ClientSegment | null;
   riskRating: ClientRiskRating | null;
