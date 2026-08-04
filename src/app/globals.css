@@ -261,6 +261,9 @@ body.is-sidebar-resizing * {
   overflow: visible;
   padding: 10px 0 16px;
   position: relative;
+  /* Keep the Modules flyout above sticky view/table headers. A child z-index
+     cannot escape the sidebar's stacking context, so the rail itself must win. */
+  z-index: 30;
 }
 
 .rail-header {
@@ -880,7 +883,7 @@ html[data-mode="night"] .date-picker-popover {
   /* Align flyout top with Reports (one rail-item above Modules) */
   top: -48px;
   width: 196px;
-  z-index: 20;
+  z-index: 40;
 }
 
 .main {
@@ -1013,18 +1016,20 @@ html[data-mode="night"] .date-picker-popover {
 
 .create-button {
   background: var(--panel);
-  border-color: var(--create-border);
-  color: var(--create-border);
+  border-color: var(--line);
+  color: var(--muted);
   cursor: pointer;
+  height: 28px;
   min-height: 28px;
   min-width: 28px;
   padding: 0;
+  width: 28px;
 }
 
+.create-button:hover,
 .create-button.active {
-  background: var(--create-border);
-  border-color: var(--create-border);
-  color: #fff;
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
+  color: var(--brand);
 }
 
 .create-menu-anchor,
@@ -1903,16 +1908,17 @@ html[data-mode="night"] .mode-toggle {
   padding: 6px 18px 0;
 }
 
-.content:has(> .home-page),
 .content:has(> .reports-page) {
   gap: 3px;
   padding: 3px;
 }
 
 .content:has(> .home-page) {
+  gap: 12px;
   height: calc(100vh - 46px);
   max-height: calc(100vh - 46px);
   overflow: hidden;
+  padding: 12px 14px 14px;
 }
 
 /* List views: keep chrome fixed; scroll only inside the table */
@@ -2690,6 +2696,7 @@ html[data-mode="night"] .home-quick-access-item.is-training .home-quick-access-l
 .home-quick-access {
   min-height: 0;
   min-width: 0;
+  padding: 12px;
 }
 
 .home-quick-access-list {
@@ -2805,7 +2812,7 @@ html[data-mode="night"] .home-quick-access-item.is-training .home-quick-access-l
 }
 
 .home-cross {
-  --home-cross-gap: 3px;
+  --home-cross-gap: 12px;
   display: grid;
   flex: 1;
   gap: var(--home-cross-gap);
@@ -2844,6 +2851,11 @@ html[data-mode="night"] .home-quick-access-item.is-training .home-quick-access-l
   padding: 2px;
   position: relative;
   z-index: 2;
+}
+
+.home-quad-left,
+.home-quad-bl {
+  padding: 12px;
 }
 
 .home-quad-left {
@@ -5341,7 +5353,19 @@ table {
 .list-table td {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.list-table th {
   white-space: nowrap;
+}
+
+.list-table td {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.list-table td[title] {
+  cursor: help;
 }
 
 .list-table th {
@@ -5350,16 +5374,17 @@ table {
 }
 
 .list-table thead th {
-  background: var(--panel-muted);
+  background: transparent;
   box-shadow: inset 0 -1px 0 var(--line);
+  padding: 6px 5px;
 }
 
 .th-content {
   align-items: center;
-  display: flex;
-  gap: 4px;
+  display: inline-flex;
+  gap: 1px;
   min-width: 0;
-  width: 100%;
+  max-width: 100%;
 }
 
 .th-drag-handle {
@@ -5368,6 +5393,7 @@ table {
   cursor: grab;
   display: inline-flex;
   flex-shrink: 0;
+  margin-left: -3px;
   opacity: 0;
   padding: 2px 0;
   transition: opacity 0.12s ease, color 0.12s ease;
@@ -5389,12 +5415,12 @@ table {
   border-radius: 6px;
   color: inherit;
   cursor: pointer;
-  display: flex;
-  flex: 1;
+  display: inline-flex;
+  flex: 0 1 auto;
   font: inherit;
-  gap: 6px;
+  gap: 3px;
   min-width: 0;
-  padding: 2px 4px 2px 0;
+  padding: 2px 1px 2px 0;
   text-align: left;
 }
 
@@ -5412,7 +5438,7 @@ table {
 
 .th-label {
   display: block;
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -6689,6 +6715,7 @@ html[data-mode="night"] .client-meta-account-inactive {
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+  position: relative;
 }
 
 .client-form-page.is-editing .field,
@@ -6801,7 +6828,7 @@ html[data-mode="night"] .client-meta-account-inactive {
 .client-record-layout {
   display: grid;
   flex: 1;
-  grid-template-columns: 156px minmax(0, 1fr);
+  grid-template-columns: 148px minmax(0, 1fr);
   min-height: 0;
 }
 
@@ -6810,36 +6837,53 @@ html[data-mode="night"] .client-meta-account-inactive {
 }
 
 .client-related-list {
-  border-right: 1px solid var(--line);
+  align-self: stretch;
+  background: color-mix(in srgb, var(--panel) 96%, var(--brand-soft));
+  border-right: 1px solid color-mix(in srgb, var(--line) 88%, transparent);
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 12px 10px;
+  gap: 4px;
+  padding: 18px 4px;
 }
 
 .client-related-list > strong {
-  font-size: 11px;
-  letter-spacing: 0.03em;
-  margin-bottom: 6px;
-  padding-inline: 0;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  margin-bottom: 8px;
+  padding: 0 8px 10px;
+  position: relative;
+}
+
+.client-related-list > strong::after {
+  background: color-mix(in srgb, var(--brand) 38%, var(--line));
+  border-radius: 999px;
+  bottom: 0;
+  content: "";
+  height: 2px;
+  left: 8px;
+  position: absolute;
+  width: 72px;
 }
 
 .client-related-item {
   align-items: center;
   background: transparent;
-  border: 0;
-  border-radius: 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
   color: var(--text);
   cursor: pointer;
   display: flex;
-  gap: 6px;
+  gap: 8px;
   font-size: 11px;
   justify-content: flex-start;
-  padding: 3px 0;
+  min-height: 34px;
+  padding: 7px 8px;
   position: relative;
   text-align: left;
-  transition: background-color 120ms ease, color 120ms ease;
-  width: calc(100% + 8px);
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease;
+  width: 100%;
 }
 
 .client-related-item-label {
@@ -6852,18 +6896,20 @@ html[data-mode="night"] .client-meta-account-inactive {
 }
 
 .client-related-item-count {
-  flex: 0 0 auto;
   align-items: center;
-  background: color-mix(in srgb, var(--muted) 8%, transparent);
-  border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 6%, var(--panel));
+  border-radius: 6px;
   color: var(--muted);
   display: inline-flex;
-  font-size: 9px;
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
   justify-content: center;
   line-height: 1;
-  min-height: 15px;
-  min-width: 17px;
-  padding: 2px 4px;
+  margin-left: 0;
+  min-height: 18px;
+  min-width: 18px;
+  padding: 2px 5px;
   text-align: center;
 }
 
@@ -6874,12 +6920,12 @@ html[data-mode="night"] .client-meta-account-inactive {
   border-radius: 4px;
   color: inherit;
   display: flex;
-  font-size: 17px;
+  font-size: 24px;
   font-weight: 500;
   height: 0;
-  margin-left: auto;
   justify-content: center;
   line-height: 1;
+  margin-left: auto;
   opacity: 0;
   overflow: hidden;
   transform: translateX(2px);
@@ -6913,7 +6959,15 @@ html[data-mode="night"] .client-related-item-tooltip {
   background: color-mix(in srgb, var(--panel) 72%, var(--brand-soft));
 }
 
-.client-related-item:hover { background: var(--brand-soft); color: var(--brand); }
+.client-related-item:hover {
+  background: color-mix(in srgb, var(--brand-soft) 78%, var(--panel));
+  border-color: color-mix(in srgb, var(--brand) 16%, transparent);
+  color: var(--brand);
+  transform: translateX(2px);
+}
+.client-related-item:hover .client-related-item-count {
+  color: var(--brand);
+}
 .client-related-item:hover .client-related-item-add {
   height: 20px;
   min-width: 20px;
@@ -7304,43 +7358,119 @@ html[data-mode="night"] .loan-form-finish-button {
 .client-form-actions .primary-button,
 .client-form-footer .secondary-button,
 .client-form-footer .primary-button {
-  min-height: 32px;
-  padding: 0 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  min-height: 34px;
+  min-width: 72px;
+  padding: 0 17px;
+  transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
   white-space: nowrap;
 }
 
+.client-form-actions .secondary-button {
+  background: color-mix(in srgb, var(--panel) 94%, var(--text) 6%);
+  border-color: color-mix(in srgb, var(--line) 82%, var(--text) 18%);
+  color: var(--text);
+}
+
 .client-form-actions .primary-button {
-  gap: 8px;
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--brand) 24%, transparent);
 }
 
-.button-spinner {
-  animation: button-spinner-rotate 0.85s linear infinite;
-  border: 2px solid rgb(255 255 255 / 34%);
-  border-radius: 999px;
-  border-top-color: #fff;
-  display: none;
-  height: 14px;
-  width: 14px;
-}
-
-.primary-button.is-saving .button-spinner {
+.client-form-actions .client-form-more {
+  align-items: center;
+  background: color-mix(in srgb, var(--panel) 94%, var(--text) 6%);
+  border-color: color-mix(in srgb, var(--line) 82%, var(--text) 18%);
+  border-radius: 8px;
   display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0;
+  width: 38px;
 }
 
-.primary-button.is-saving {
-  cursor: wait;
-  opacity: 0.9;
+.client-form-actions .client-form-action {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  gap: 5px;
+  justify-content: center;
+  min-height: 28px;
+  padding: 3px 7px;
+  transition: background 140ms ease, color 140ms ease, opacity 140ms ease;
 }
 
-@keyframes button-spinner-rotate {
+.client-form-actions .client-form-action:hover:not(:disabled) {
+  background: var(--panel-muted);
+  color: var(--text);
+}
+
+.client-form-actions .client-form-action:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.client-form-actions .client-save-button:not(:disabled) {
+  color: var(--brand);
+}
+
+.client-form-actions .client-form-refresh {
+  margin-left: 4px;
+}
+
+.client-save-spinner,
+.client-save-overlay-spinner {
+  animation: client-save-spin 700ms linear infinite;
+}
+
+.client-save-loading-overlay {
+  align-items: center;
+  backdrop-filter: blur(2px);
+  background: color-mix(in srgb, var(--panel) 68%, transparent);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  position: absolute;
+  z-index: 30;
+}
+
+.client-save-loading-card {
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 14px 38px rgb(15 23 42 / 16%);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+  font-weight: 600;
+  gap: 10px;
+  min-width: 148px;
+  padding: 20px 24px;
+}
+
+.client-save-overlay-spinner {
+  color: var(--brand);
+}
+
+@keyframes client-save-spin {
   to {
     transform: rotate(360deg);
   }
 }
 
 .client-form-actions .secondary-button {
-  background: var(--panel);
-  border-color: var(--line);
   color: var(--text);
 }
 
