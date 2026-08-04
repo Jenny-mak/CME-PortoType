@@ -312,7 +312,13 @@ export function makeDrillHandler(open: (request: DrillRequest) => void) {
   };
 }
 
-export function ReportDrillProvider({ children }: { children: ReactNode }) {
+export function ReportDrillProvider({
+  children,
+  onOpenRecord,
+}: {
+  children: ReactNode;
+  onOpenRecord?: (entity: DrillEntity, recordId: string) => void;
+}) {
   const [request, setRequest] = useState<DrillRequest | null>(null);
   const open = useCallback((next: DrillRequest) => setRequest(next), []);
   const close = useCallback(() => setRequest(null), []);
@@ -320,12 +326,20 @@ export function ReportDrillProvider({ children }: { children: ReactNode }) {
   return (
     <DrillContext.Provider value={open}>
       {children}
-      {request ? <DrillModal request={request} onClose={close} /> : null}
+      {request ? <DrillModal request={request} onClose={close} onOpenRecord={onOpenRecord} /> : null}
     </DrillContext.Provider>
   );
 }
 
-function DrillModal({ request, onClose }: { request: DrillRequest; onClose: () => void }) {
+function DrillModal({
+  request,
+  onClose,
+  onOpenRecord,
+}: {
+  request: DrillRequest;
+  onClose: () => void;
+  onOpenRecord?: (entity: DrillEntity, recordId: string) => void;
+}) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
@@ -337,6 +351,12 @@ function DrillModal({ request, onClose }: { request: DrillRequest; onClose: () =
   const shared = {
     fileStem: `${request.chart}-${request.category}`,
     entity: request.entity,
+    onOpenRecord: onOpenRecord
+      ? (recordId: string) => {
+          onClose();
+          onOpenRecord(request.entity, recordId);
+        }
+      : undefined,
   };
 
   return createPortal(
@@ -408,11 +428,13 @@ function DrillTable<T extends { id: string }>({
   rows,
   fileStem,
   entity,
+  onOpenRecord,
 }: {
   columns: DrillColumn<T>[];
   rows: T[];
   fileStem: string;
   entity: DrillEntity;
+  onOpenRecord?: (recordId: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortState | null>(null);
@@ -493,7 +515,18 @@ function DrillTable<T extends { id: string }>({
           </thead>
           <tbody>
             {visible.map((row) => (
-              <tr key={row.id}>
+              <tr
+                key={row.id}
+                className={onOpenRecord ? "is-clickable" : undefined}
+                tabIndex={onOpenRecord ? 0 : undefined}
+                onClick={() => onOpenRecord?.(row.id)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onOpenRecord?.(row.id);
+                  }
+                }}
+              >
                 {columns.map((col) => {
                   const text = col.render ? col.render(row) : String(col.get(row));
                   return (

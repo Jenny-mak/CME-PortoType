@@ -30,15 +30,28 @@ export function LoginPage({ onSuccess }: { onSuccess: (user: PublicUser) => void
       <div className="login-backdrop" aria-hidden="true" />
       <div className="login-shell">
         <aside className="login-brand">
-          <div className="login-brand-mark">CRM</div>
-          <h1>Commercial Banking Workspace</h1>
-          <p>Sign in to manage clients, contacts, loans, and campaigns across your business unit.</p>
+          <div className="login-brand-glow" aria-hidden="true" />
+          <div className="login-brand-mark">
+            <span className="login-brand-symbol" aria-hidden="true">C</span>
+            <span>CRM</span>
+          </div>
+          <div className="login-brand-copy">
+            <span className="login-eyebrow">Relationship banking, reimagined</span>
+            <h1>Client Management Experience</h1>
+            <p>One intelligent workspace for every client relationship, opportunity, and interaction.</p>
+            <div className="login-brand-pills" aria-label="Workspace capabilities">
+              <span>Clients</span>
+              <span>Loans</span>
+              <span>Insights</span>
+            </div>
+          </div>
         </aside>
 
         <section className="login-card">
           <header className="login-card-header">
-            <h2>Sign in</h2>
-            <p>Use your demo account credentials to continue.</p>
+            <span className="login-card-kicker">Welcome back</span>
+            <h2>Sign in to your workspace</h2>
+            <p>Enter your account credentials to continue.</p>
           </header>
 
           <form className="login-form" onSubmit={handleSubmit}>

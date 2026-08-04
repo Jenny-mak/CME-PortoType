@@ -8,6 +8,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
+import { Maximize2, Minimize2 } from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -255,13 +256,38 @@ function ReportCard({
   children: ReactNode;
   className?: string;
 }) {
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    if (!expanded) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setExpanded(false);
+    };
+    document.body.classList.add("report-fullscreen-open");
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.classList.remove("report-fullscreen-open");
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [expanded]);
+
   return (
-    <section className={`report-card ${className}`}>
+    <section className={`report-card ${className} ${expanded ? "is-fullscreen" : ""}`}>
       <header className="report-card-head">
         <div>
           <h3>{title}</h3>
           {subtitle ? <p>{subtitle}</p> : null}
         </div>
+        <button
+          type="button"
+          className="report-fullscreen-button"
+          aria-label={expanded ? `Exit full screen for ${title}` : `Full screen ${title}`}
+          title={expanded ? "Exit full screen" : "Full screen"}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {expanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+          <span>{expanded ? "Exit full screen" : "Full screen"}</span>
+        </button>
       </header>
       <div className="report-card-body">{children}</div>
     </section>
@@ -1613,11 +1639,15 @@ const TABS: { key: ReportTab; label: string }[] = [
   { key: "activity", label: "Activity" },
 ];
 
-export function ReportsWorkspace() {
+export function ReportsWorkspace({
+  onOpenRecord,
+}: {
+  onOpenRecord?: (entity: "deals" | "accounts" | "leads" | "campaigns" | "tasks" | "meetings" | "calls", recordId: string) => void;
+}) {
   const [tab, setTab] = useState<ReportTab>("overview");
 
   return (
-    <ReportDrillProvider>
+    <ReportDrillProvider onOpenRecord={onOpenRecord}>
       <div className="reports-page">
         <header className="reports-header">
           <div>

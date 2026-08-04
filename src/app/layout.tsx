@@ -1,13 +1,5 @@
 import type { Metadata } from "next";
-import { Source_Sans_3 } from "next/font/google";
 import "./globals.css";
-
-const sans = Source_Sans_3({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-sans",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "CRM",
@@ -24,7 +16,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" data-mode="day" suppressHydrationWarning>
-      <body className={`${sans.variable} ${sans.className}`}>{children}</body>
+      <body>{children}</body>
     </html>
   );
 }

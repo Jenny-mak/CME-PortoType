@@ -14,6 +14,8 @@ export type ModuleKey =
   | "meetings"
   | "calls"
   | "campaigns"
+  | "salesLeads"
+  | "contactHistory"
   | "documents";
 
 /** Shared pipeline stage labels used across Loans and product modules. */
@@ -302,6 +304,32 @@ export type CampaignChannel =
   | "Social / Digital Ads"
   | "Direct Mail"
   | "Mixed";
+
+export type SalesLeadStatus = "New" | "Contacted" | "Qualified" | "Converted" | "Lost";
+export type ContactHistoryType = "Call" | "Email" | "Meeting" | "Visit" | "Note";
+export type SalesLead = {
+  id: string;
+  campaignId: string;
+  name: string;
+  company: string;
+  email: string;
+  phone: string;
+  owner: string;
+  status: SalesLeadStatus;
+  source: string;
+  expectedValue: number;
+  nextFollowUp: string;
+};
+export type ContactHistory = {
+  id: string;
+  salesLeadId: string;
+  contactedAt: string;
+  type: ContactHistoryType;
+  subject: string;
+  outcome: string;
+  nextAction: string;
+  owner: string;
+};
 
 export type Campaign = {
   id: string;

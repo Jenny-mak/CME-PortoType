@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown, ChevronRight, MoreHorizontal, X } from "lucide-react";
+import { ChevronDown, ChevronRight, MoreHorizontal, X } from "lucide-react";
 import {
   createContext,
   useContext,
@@ -47,11 +47,10 @@ type Props = {
   onNew?: () => void;
 };
 
-export function RowActions({ context, onEdit, onDelete, onNew }: Props) {
+export function RowActions({ context, onEdit, onDelete }: Props) {
   const [open, setOpen] = useState(false);
   const [flyout, setFlyout] = useState<Flyout>(null);
   const [form, setForm] = useState<RowActionForm>(null);
-  const [copied, setCopied] = useState(false);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const [moreRect, setMoreRect] = useState<DOMRect | null>(null);
   const [callRect, setCallRect] = useState<DOMRect | null>(null);
@@ -88,7 +87,6 @@ export function RowActions({ context, onEdit, onDelete, onNew }: Props) {
     setAnchor(rect);
     setOpen((value) => !value);
     setFlyout(null);
-    setCopied(false);
   }
 
   function runAndClose(action: () => void) {
@@ -97,17 +95,7 @@ export function RowActions({ context, onEdit, onDelete, onNew }: Props) {
     setFlyout(null);
   }
 
-  function handleCopyUrl() {
-    const value = context.url?.trim() || (typeof window !== "undefined" ? window.location.href : "");
-    if (!value) return;
-    void navigator.clipboard?.writeText(value).then(() => {
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1200);
-    });
-  }
-
   const rootItems: MenuItem[] = [
-    ...(onNew ? [{ kind: "action" as const, label: "New", action: onNew }] : []),
     {
       kind: "action",
       label: "Edit",
@@ -117,14 +105,9 @@ export function RowActions({ context, onEdit, onDelete, onNew }: Props) {
       },
     },
     { kind: "action", label: "Send Email", action: () => setForm("email") },
+    { kind: "action", label: "Create Call", action: () => setForm("scheduleCall") },
+    { kind: "action", label: "Create Meeting", action: () => setForm("meeting") },
     { kind: "action", label: "Create Task", action: () => setForm("task") },
-    {
-      kind: "action",
-      label: "Delete",
-      action: () => setForm("delete"),
-    },
-    { kind: "action", label: copied ? "Copied" : "Copy URL", action: handleCopyUrl },
-    { kind: "flyout", label: "More...", flyout: "more" },
   ];
 
   const moreItems: MenuItem[] = [
@@ -264,7 +247,7 @@ function MenuPanel({
   onHoverFlyout: (next: Flyout, rect: DOMRect) => void;
   onAction: (action: () => void) => void;
 }) {
-  const width = 168;
+  const width = 158;
   const left =
     placement === "right"
       ? Math.min(anchor.right + 4, window.innerWidth - width - 8)
@@ -308,21 +291,9 @@ function MenuPanel({
             onMouseEnter={() => {
               if (placement === "below") onHoverFlyout(null, anchor);
             }}
-            onClick={() => {
-              if (item.label === "Copy URL" || item.label === "Copied") {
-                item.action();
-                return;
-              }
-              onAction(item.action);
-            }}
+            onClick={() => onAction(item.action)}
           >
-            {item.label === "Copied" ? (
-              <>
-                <Check size={14} /> Copied
-              </>
-            ) : (
-              item.label
-            )}
+            {item.label}
           </button>
         );
       })}
@@ -612,24 +583,30 @@ export function RowSelectCell({
   context,
   onEdit,
   onDelete,
+  onNew,
+  showCheckbox = true,
 }: {
   context: RowActionContext;
   onEdit?: () => void;
   onDelete?: () => void;
+  onNew?: () => void;
+  showCheckbox?: boolean;
 }) {
   const selection = useRowSelection();
   const checked = selection?.isSelected(context.id) ?? false;
 
   return (
     <div className="row-lead-controls" onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
-      <RowActions context={context} onEdit={onEdit} onDelete={onDelete} />
-      <input
-        type="checkbox"
-        className="row-select-checkbox"
-        aria-label={`Select ${context.label}`}
-        checked={checked}
-        onChange={(event) => selection?.setSelected(context.id, event.target.checked)}
-      />
+      <RowActions context={context} onEdit={onEdit} onDelete={onDelete} onNew={onNew} />
+      {showCheckbox ? (
+        <input
+          type="checkbox"
+          className="row-select-checkbox"
+          aria-label={`Select ${context.label}`}
+          checked={checked}
+          onChange={(event) => selection?.setSelected(context.id, event.target.checked)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -666,13 +643,15 @@ type RowSelectionValue = {
   isSelected: (id: string) => boolean;
   setSelected: (id: string, checked: boolean) => void;
   setPageSelected: (checked: boolean) => void;
+  clearSelection: () => void;
+  selectedIds: string[];
   allPageSelected: boolean;
   somePageSelected: boolean;
 };
 
 const RowSelectionContext = createContext<RowSelectionValue | null>(null);
 
-function useRowSelection() {
+export function useRowSelection() {
   return useContext(RowSelectionContext);
 }
 
@@ -724,6 +703,8 @@ export function RowSelectionProvider({
           return next;
         });
       },
+      clearSelection: () => setSelectedIds(new Set()),
+      selectedIds: [...selectedIds],
       allPageSelected,
       somePageSelected,
     };

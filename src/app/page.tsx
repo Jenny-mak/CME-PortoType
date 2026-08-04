@@ -61,7 +61,6 @@ import { AiChatWidget } from "@/components/AiChatWidget";
 import { ImportRecordsModal } from "@/components/ImportRecordsModal";
 import { FieldFilterSection } from "@/components/FieldFilterSection";
 import { RelatedModuleFilterSection } from "@/components/RelatedModuleFilterSection";
-import { ClientKanbanBoard } from "@/components/ClientKanbanBoard";
 import { DateField } from "@/components/DateField";
 import { HomeCalendar, HomeLoansClosing } from "@/components/HomeCalendar";
 import {
@@ -79,6 +78,7 @@ import {
   RowExpandTrigger,
   RowSelectCell,
   RowSelectionProvider,
+  useRowSelection,
 } from "@/components/RowActions";
 import { TrainingVideos } from "@/components/TrainingVideos";
 import { clearSessionUser, loadSessionUser, saveSessionUser } from "@/lib/auth";
@@ -161,6 +161,8 @@ import {
   ClientStatus,
   AccountStatus,
   Contact,
+  ContactHistory,
+  ContactHistoryType,
   ContactPreferredChannel,
   ContactRole,
   ContactStatus,
@@ -178,6 +180,8 @@ import {
   UserProfile,
   UserRole,
   UserStatus,
+  SalesLead,
+  SalesLeadStatus,
 } from "@/lib/types";
 import {
   demoUsers,
@@ -226,6 +230,7 @@ type AccentColor = { key: string; label: string; value: string; mark?: string };
 
 const accentColors = [
   { key: "crimson", label: "Crimson", value: "#a31d31", mark: "#cf4651" },
+  { key: "deepCrimson", label: "Deep Crimson", value: "#741426", mark: "#a83d50" },
   { key: "oceanBlue", label: "Ocean Blue", value: "#004b97" },
   { key: "ledgerGreen", label: "Ledger Green", value: "#00875a" },
   { key: "vividBlue", label: "Vivid Blue", value: "#1677ff" },
@@ -318,6 +323,8 @@ const moduleIcons: Record<Exclude<ModuleKey, "home" | "reports">, React.ReactNod
   meetings: <CalendarDays size={18} strokeWidth={1.6} />,
   calls: <Phone size={18} strokeWidth={1.6} />,
   campaigns: <Megaphone size={18} strokeWidth={1.6} />,
+  salesLeads: <Briefcase size={18} strokeWidth={1.6} />,
+  contactHistory: <ClipboardClock size={18} strokeWidth={1.6} />,
   documents: <FileText size={18} strokeWidth={1.6} />,
 };
 
@@ -600,7 +607,7 @@ export default function CRMWorkspace() {
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>("modules");
   const [appearanceMode, setAppearanceMode] = useState<AppearanceMode>("auto");
   const [themeTone, setThemeTone] = useState<ThemeTone>("dark");
-  const [accentKey, setAccentKey] = useState<AccentKey>("crimson");
+  const [accentKey, setAccentKey] = useState<AccentKey>("deepCrimson");
   const [adminQuery, setAdminQuery] = useState("");
   const [bootLoading, setBootLoading] = useState(false);
   const [createIntent, setCreateIntent] = useState<{ module: ModuleKey; id: number } | null>(null);
@@ -1013,6 +1020,8 @@ export default function CRMWorkspace() {
                     onCreateHandled={() => setCreateIntent(null)}
                   />
                 )}
+                {activeModule === "salesLeads" && <EventTriggerWorkspace module="salesLeads" />}
+                {activeModule === "contactHistory" && <EventTriggerWorkspace module="contactHistory" />}
                 {activeModule === "campaigns" && (
                   <CampaignWorkspace
                     createIntentId={createIntent?.module === "campaigns" ? createIntent.id : null}
@@ -1022,7 +1031,11 @@ export default function CRMWorkspace() {
                     onReturnHome={returnToHome}
                   />
                 )}
-                {activeModule === "reports" && <ReportsWorkspace />}
+                {activeModule === "reports" && (
+                  <ReportsWorkspace
+                    onOpenRecord={(entity, recordId) => openRecord(entity, recordId)}
+                  />
+                )}
                 {activeModule === "contacts" && (
                   <ContactsWorkspace
                     createIntentId={createIntent?.module === "contacts" ? createIntent.id : null}
@@ -1083,19 +1096,21 @@ function ModuleViewActionsProvider({ children }: { children: ReactNode }) {
 }
 
 const MODULE_VIEW_TABS: Partial<Record<ModuleKey, string[]>> = {
-  accounts: ["Main table", "Kanban"],
-  contacts: ["Main table", "Summary", "Form", "Calendar"],
+  accounts: ["Main table"],
+  contacts: ["Main table"],
   deals: ["Main table", "Kanban"],
   tradeFinance: ["Main table", "Kanban"],
   paymentService: ["Main table", "Kanban"],
   sustainableFinance: ["Main table", "Kanban"],
   globalMarket: ["Main table", "Kanban"],
   lifeInsurance: ["Main table", "Kanban"],
-  campaigns: ["Main table", "Report", "Form", "Calendar"],
-  leads: ["Main table", "Sales report", "Pipeline", "Form", "Kanban", "Calendar"],
-  tasks: ["Main table", "Form", "Kanban", "Calendar"],
-  meetings: ["Main table", "Form", "Calendar"],
-  calls: ["Main table", "Form"],
+  campaigns: ["Main table", "Report"],
+  salesLeads: ["Main table"],
+  contactHistory: ["Main table"],
+  leads: ["Main table", "Sales report", "Pipeline", "Kanban"],
+  tasks: ["Main table", "Kanban"],
+  meetings: ["Main table"],
+  calls: ["Main table"],
   documents: ["Main table", "Files"],
 };
 
@@ -1158,7 +1173,7 @@ function ModuleViewIconTab({
   );
 }
 
-/** Modules that use the Clients-style icon chrome: Main table + Kanban only, no “add view”. */
+/** Modules that use the Clients-style icon chrome with no “add view”. */
 const ICON_VIEW_MODULES = new Set<ModuleKey>([
   "accounts",
   "deals",
@@ -1202,9 +1217,10 @@ function ModuleViewHeader({
   const moduleLabel = moduleMeta?.label ?? activeModule;
   const useIconTabs = ICON_VIEW_MODULES.has(activeModule);
   const supportsCustomViews = activeModule === "deals";
+  const isClientModule = activeModule === "accounts";
   const dealColumns = useMemo(() => buildDealColumns(PRODUCT_PIPELINE_CONFIGS.deals), []);
   const tabs = useIconTabs
-    ? ["Main table", "Kanban"]
+    ? (isClientModule ? ["Main table"] : ["Main table", "Kanban"])
     : (MODULE_VIEW_TABS[activeModule] ?? ["Main table"]);
   const { activeTab, setActiveTab } = useContext(ModuleViewTabContext);
   const fallbackViews = useMemo(
@@ -1250,10 +1266,10 @@ function ModuleViewHeader({
 
   useEffect(() => {
     const availableTabs = useIconTabs
-      ? ["Main table", "Kanban"]
+      ? (isClientModule ? ["Main table"] : ["Main table", "Kanban"])
       : (MODULE_VIEW_TABS[activeModule] ?? ["Main table"]);
     setActiveTab(initialTab && availableTabs.includes(initialTab) ? initialTab : "Main table");
-  }, [activeModule, setActiveTab, initialTab, useIconTabs]);
+  }, [activeModule, setActiveTab, initialTab, useIconTabs, isClientModule]);
 
   useEffect(() => {
     if (!supportsCustomViews) {
@@ -1493,6 +1509,38 @@ function ModuleViewHeader({
             </button>
           </div>
         </>
+      ) : activeModule === "accounts" ? (
+        <>
+          <div className="module-view-menu-section" role="presentation">
+            Public Views
+          </div>
+          {fallbackViews.map((view) => (
+            <button
+              key={view}
+              type="button"
+              role="option"
+              aria-selected={selectedView === view}
+              className={selectedView === view ? "is-selected" : ""}
+              onClick={() => selectListView(view, view)}
+            >
+              {view}
+            </button>
+          ))}
+          <div className="module-view-menu-footer">
+            <button
+              type="button"
+              className={`module-view-menu-toggle ${showCustomViewsAsTab ? "is-active" : ""}`}
+              aria-pressed={showCustomViewsAsTab}
+              onClick={() => {
+                setShowCustomViewsAsTab((open) => !open);
+                viewPickerRef.current?.removeAttribute("open");
+              }}
+            >
+              <Eye size={16} aria-hidden="true" />
+              <span>{showCustomViewsAsTab ? "Hide views as Tab" : "Show views as Tab"}</span>
+            </button>
+          </div>
+        </>
       ) : (
         fallbackViews.map((view) => (
           <button
@@ -1523,20 +1571,26 @@ function ModuleViewHeader({
             <ChevronLeft size={18} />
           </button>
         ) : null}
-        {supportsCustomViews && showCustomViewsAsTab ? (
+        {(supportsCustomViews || activeModule === "accounts") && showCustomViewsAsTab ? (
           <div className="module-view-pill-bar" aria-label={`${moduleLabel} views`}>
             <div className="module-view-pill-list">
-              {loanMenuViews.map((view) => (
-                <button
-                  key={view.id}
-                  type="button"
-                  className={`module-view-pill ${loansView === view.id ? "is-active" : ""}`}
-                  aria-pressed={loansView === view.id}
-                  onClick={() => selectListView(view.id, view.name)}
-                >
-                  {view.name}
-                </button>
-              ))}
+              {(supportsCustomViews
+                ? loanMenuViews
+                : fallbackViews.map((name) => ({ id: name, name, kind: "public" as const })))
+                .map((view) => {
+                  const active = supportsCustomViews ? loansView === view.id : accountsView === view.id;
+                  return (
+                    <button
+                      key={view.id}
+                      type="button"
+                      className={`module-view-pill ${active ? "is-active" : ""}`}
+                      aria-pressed={active}
+                      onClick={() => selectListView(view.id, view.name)}
+                    >
+                      {view.name}
+                    </button>
+                  );
+                })}
             </div>
             <details className="module-view-pill-more" ref={viewPickerRef}>
               <summary aria-label="More views">
@@ -1581,11 +1635,6 @@ function ModuleViewHeader({
               </button>
             );
           })}
-          {!useIconTabs ? (
-            <button type="button" className="module-view-add" aria-label={`Add ${moduleLabel} view`}>
-              <Plus size={16} />
-            </button>
-          ) : null}
           <button
             type="button"
             className={`module-view-filter-toggle ${filtersOpen ? "is-active" : ""}`}
@@ -2924,7 +2973,11 @@ function CustomViewModal({
                           placeholder="Value"
                           onChange={(event) =>
                             updateFilterRow(row.id, {
-                              filter: { ...row.filter, kind: "text", value: event.target.value },
+                              filter: {
+                                kind: "text",
+                                op: row.filter.kind === "text" ? row.filter.op : "contains",
+                                value: event.target.value,
+                              },
                             })
                           }
                         />
@@ -2942,7 +2995,7 @@ function CustomViewModal({
                             placeholder="Value"
                             onChange={(event) =>
                               updateFilterRow(row.id, {
-                                filter: { ...row.filter, value: event.target.value },
+                                filter: { ...row.filter, value: event.target.value } as ColumnFilter,
                               })
                             }
                           />
@@ -2954,7 +3007,7 @@ function CustomViewModal({
                               placeholder="To"
                               onChange={(event) =>
                                 updateFilterRow(row.id, {
-                                  filter: { ...row.filter, valueTo: event.target.value },
+                                  filter: { ...row.filter, valueTo: event.target.value } as ColumnFilter,
                                 })
                               }
                             />
@@ -3791,11 +3844,12 @@ function ResizableTable<T>({
   data,
   getCellValue,
   dataWidth = 180,
-  sort,
-  filters,
-  onSortChange,
-  onFilterChange,
-  onColumnsReorder,
+  defaultColumnWidths,
+  sort = null,
+  filters = {},
+  onSortChange = () => {},
+  onFilterChange = () => {},
+  onColumnsReorder = () => {},
   showRowExpandSlot = false,
   wrapClassName = "table-wrap",
   tableClassName = "list-table",
@@ -3805,11 +3859,12 @@ function ResizableTable<T>({
   data: T[];
   getCellValue: (row: T, key: string) => string | number;
   dataWidth?: number;
-  sort: SortState;
-  filters: ColumnFilters;
-  onSortChange: (next: SortState) => void;
-  onFilterChange: (key: string, next: ColumnFilter | undefined) => void;
-  onColumnsReorder: (next: ColumnDef[]) => void;
+  defaultColumnWidths?: Record<string, number>;
+  sort?: SortState;
+  filters?: ColumnFilters;
+  onSortChange?: (next: SortState) => void;
+  onFilterChange?: (key: string, next: ColumnFilter | undefined) => void;
+  onColumnsReorder?: (next: ColumnDef[]) => void;
   showRowExpandSlot?: boolean;
   wrapClassName?: string;
   tableClassName?: string;
@@ -3821,9 +3876,10 @@ function ResizableTable<T>({
         .join("\0"),
     [columns],
   );
-  const [widths, setWidths] = useState(() =>
-    getDefaultColumnWidths(columns, data, getCellValue),
-  );
+  const [widths, setWidths] = useState(() => ({
+    ...getDefaultColumnWidths(columns, data, getCellValue),
+    ...defaultColumnWidths,
+  }));
   const [activeDivider, setActiveDivider] = useState<string | null>(null);
   const [resizingKey, setResizingKey] = useState<string | null>(null);
   const [openFilterKey, setOpenFilterKey] = useState<string | null>(null);
@@ -3837,7 +3893,10 @@ function ResizableTable<T>({
 
   useEffect(() => {
     setWidths((prev) => {
-      const defaults = getDefaultColumnWidths(columns, data, getCellValue, dataWidth);
+      const defaults = {
+        ...getDefaultColumnWidths(columns, data, getCellValue),
+        ...defaultColumnWidths,
+      };
       if (showRowExpandSlot && defaults.select != null) {
         defaults.select = 84;
       }
@@ -3857,7 +3916,7 @@ function ResizableTable<T>({
     setDragKey(null);
     setDropKey(null);
     dragRef.current = null;
-  }, [columnsIdentity, dataWidth, columns, showRowExpandSlot]);
+  }, [columnsIdentity, dataWidth, defaultColumnWidths, columns, showRowExpandSlot]);
 
   useEffect(() => {
     if (!dragKey) return;
@@ -4154,6 +4213,41 @@ function ResizableTable<T>({
   );
 }
 
+function ClientMassActions({ onDelete }: { onDelete: (ids: string[]) => void }) {
+  const selection = useRowSelection();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const selectedIds = selection?.selectedIds ?? [];
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [menuOpen]);
+
+  if (selectedIds.length === 0) return null;
+  return (
+    <div className="list-create-split client-mass-actions" ref={rootRef}>
+      <button className="list-create-main" type="button">Mass Update</button>
+      <button className={`list-create-caret ${menuOpen ? "active" : ""}`} type="button" aria-label="Mass actions" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}>
+        <ChevronDown size={14} />
+      </button>
+      {menuOpen ? (
+        <div className="list-create-menu" role="menu">
+          <button className="list-create-menu-item is-danger" type="button" role="menuitem" onClick={() => {
+            onDelete(selectedIds);
+            selection?.clearSelection();
+            setMenuOpen(false);
+          }}>Mass Delete</button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /** Split create button: primary action plus a caret menu for bulk import. */
 function ListCreateButton({
   createLabel,
@@ -4239,8 +4333,10 @@ function RecordListShell<T extends { id: string }>({
   importLabel,
   onImport,
   onExport,
+  onMassDelete,
   showRowExpandSlot = false,
   listModuleKey,
+  defaultColumnWidths,
 }: {
   title: string;
   filters: string[];
@@ -4255,8 +4351,10 @@ function RecordListShell<T extends { id: string }>({
   onImport?: () => void;
   /** Receives the rows currently visible in the table, after sort and filters. */
   onExport?: (rows: T[]) => void;
+  onMassDelete?: (ids: string[]) => void;
   showRowExpandSlot?: boolean;
   listModuleKey?: ModuleKey;
+  defaultColumnWidths?: Record<string, number>;
 }) {
   const columnsIdentity = useMemo(
     () =>
@@ -4329,6 +4427,7 @@ function RecordListShell<T extends { id: string }>({
           + New
         </button>
       ) : null}
+      {onMassDelete ? <ClientMassActions onDelete={onMassDelete} /> : null}
       {onExport ? (
         <button
           className="secondary-button"
@@ -4353,7 +4452,9 @@ function RecordListShell<T extends { id: string }>({
   );
 
   return (
-    <div className={`record-layout ${filtersOpen ? "" : "is-filters-hidden"}`}>
+    <div
+      className={`record-layout ${filtersOpen ? "" : "is-filters-hidden"} ${listModuleKey ? `module-view-${listModuleKey}` : ""}`}
+    >
       {filtersOpen ? (
         <FilterPanel
           title={`Filter ${title.replace("All ", "")} by`}
@@ -4374,18 +4475,19 @@ function RecordListShell<T extends { id: string }>({
           onClearRelatedRules={() => setAppliedRelatedRules([])}
         />
       ) : null}
-      <section className="list-shell">
-        {actionsHost
-          ? createPortal(listActions, actionsHost)
-          : (
-            <div className="list-actions">{listActions}</div>
-          )}
-        <div className="list-shell-body">
-          <RowSelectionProvider pageIds={pageIds} allIds={allIds}>
+      <RowSelectionProvider pageIds={pageIds} allIds={allIds}>
+        <section className="list-shell">
+          {actionsHost
+            ? createPortal(listActions, actionsHost)
+            : (
+              <div className="list-actions">{listActions}</div>
+            )}
+          <div className="list-shell-body">
             <ResizableTable
               columns={orderedColumns}
               data={data}
               getCellValue={getCellValue}
+              defaultColumnWidths={defaultColumnWidths}
               sort={sort}
               filters={columnFilters}
               showRowExpandSlot={showRowExpandSlot}
@@ -4402,14 +4504,13 @@ function RecordListShell<T extends { id: string }>({
             >
               {renderRows(pagedRows, orderedColumns)}
             </ResizableTable>
-          </RowSelectionProvider>
           {refreshing ? (
             <div className="logo-loading-overlay" role="status" aria-live="polite" aria-label="Loading">
               <LogoDrawLoader />
             </div>
           ) : null}
-        </div>
-        <div className="footer-row">
+          </div>
+          <div className="footer-row">
           <span className="pagination-total">
             Total Records <strong>{total}</strong>
           </span>
@@ -4438,8 +4539,9 @@ function RecordListShell<T extends { id: string }>({
               <ChevronRight size={16} />
             </button>
           </div>
-        </div>
-      </section>
+          </div>
+        </section>
+      </RowSelectionProvider>
     </div>
   );
 }
@@ -5354,7 +5456,7 @@ function buildClientRelatedCards(clientName: string): ClientRelatedCard[] {
   const dealColumns = ["Loan Name", "Stage", "Facility Number", "Client", "Business Unit", "Product Type", "Amount", "Currency", "Facility Status"];
   const dealRecords = (items: Deal[]) => items.map((item) => ({
     id: item.id,
-    values: [item.name, item.stage, item.facilityNumber, item.account, item.businessUnit, item.productType, item.amount, item.currency, item.facilityStatus],
+    values: [item.name, item.stage, item.facilityNumber, item.account, item.businessUnit, item.productType, String(item.amount), item.currency, item.facilityStatus],
   }));
   const dealCard = (key: string, label: string, items: Deal[]): ClientRelatedCard => ({
     key,
@@ -5432,6 +5534,12 @@ function ClientFormPage({
   const formStateClass = isDirty ? "is-editing" : "is-pristine";
   const recordTitle = mode === "create" ? "Create Client" : `Client. ${account.companyName.trim() || "Company Name"}`;
 
+  useEffect(() => {
+    if (!activeRelatedCard) return;
+    const timeoutId = window.setTimeout(() => setActiveRelatedCard(null), 1500);
+    return () => window.clearTimeout(timeoutId);
+  }, [activeRelatedCard]);
+
   function update<K extends keyof ClientFormDraft>(key: K, value: ClientFormDraft[K]) {
     setDraft((prev) => ({ ...prev, [key]: value }));
   }
@@ -5486,6 +5594,7 @@ function ClientFormPage({
         from: values.from.trim(),
         to: values.to.trim(),
         relatedTo: values.relatedTo.trim() || client,
+        owner: "Current User",
       };
       const current = loadPersistedRecords<Meeting>(MEETINGS_STORAGE_KEY) ?? [...meetings];
       savePersistedRecords(MEETINGS_STORAGE_KEY, [next, ...current]);
@@ -5667,7 +5776,7 @@ function ClientFormPage({
                   className={detailTab === "overview" ? "is-active" : ""}
                   onClick={() => {
                     setDetailTab("overview");
-                    setActiveRelatedCard(null);
+                    setActiveRelatedCard("overview");
                     window.requestAnimationFrame(() => {
                       formBodyRef.current?.scrollTo({ top: 0, behavior: "smooth" });
                     });
@@ -5686,7 +5795,7 @@ function ClientFormPage({
           <div className="client-form-body" ref={formBodyRef}>
             {detailTab === "overview" ? (
               <>
-                <section className={`client-form-card ${clientStatusError || statusError ? "is-invalid" : ""}`}>
+                <section className={`client-form-card ${clientStatusError || statusError ? "is-invalid" : ""} ${activeRelatedCard === "overview" ? "is-highlighted" : ""}`}>
                   <div className="client-form-card-head">
                     <div>
                       <strong>Client Information</strong>
@@ -6091,6 +6200,13 @@ function savePersistedRecords<T>(storageKey: string, rows: T[]) {
   }
 }
 
+function loadRecordsWithDemoSeeds<T extends { id: string }>(storageKey: string, seeds: T[]) {
+  const persisted = loadPersistedRecords<T>(storageKey);
+  if (!persisted) return [...seeds];
+  const existingIds = new Set(persisted.map((row) => row.id));
+  return [...persisted, ...seeds.filter((row) => !existingIds.has(row.id))];
+}
+
 function loadRecordsWithNewDemoSeeds<T extends { id: string }>(storageKey: string, seeds: T[]) {
   const persisted = loadPersistedRecords<T>(storageKey);
   if (!persisted) return [...seeds];
@@ -6102,6 +6218,36 @@ function loadRecordsWithNewDemoSeeds<T extends { id: string }>(storageKey: strin
   return [...persisted, ...newDemoRows];
 }
 
+const SALES_LEADS_STORAGE_KEY = "crm-demo-sales-leads";
+const CONTACT_HISTORY_STORAGE_KEY = "crm-demo-contact-history";
+const SAMPLE_SALES_LEADS: SalesLead[] = [
+  { id: "sl-001", campaignId: "camp-1", name: "Alice Wong", company: "Harbour Manufacturing Ltd", email: "alice.wong@harbour.example", phone: "+852 2818 2201", owner: "Jenny", status: "Qualified", source: "Campaign Event", expectedValue: 18000000, nextFollowUp: "2026-08-08" },
+  { id: "sl-002", campaignId: "camp-1", name: "Daniel Chan", company: "Pacific Retail Group", email: "daniel.chan@pacific.example", phone: "+852 2522 7811", owner: "Jenny", status: "Contacted", source: "Email", expectedValue: 9500000, nextFollowUp: "2026-08-10" },
+  { id: "sl-003", campaignId: "camp-1", name: "Kevin Lau", company: "Metro Logistics Holdings", email: "kevin.lau@metro.example", phone: "+852 2833 1177", owner: "Jenny", status: "New", source: "Referral", expectedValue: 7200000, nextFollowUp: "2026-08-13" },
+  { id: "sl-004", campaignId: "camp-2", name: "Sophia Lee", company: "Everbright Trading Co", email: "sophia.lee@everbright.example", phone: "+852 2866 9032", owner: "Marcus", status: "New", source: "Webinar", expectedValue: 6200000, nextFollowUp: "2026-08-12" },
+  { id: "sl-005", campaignId: "camp-2", name: "Michael Ho", company: "Golden Bridge Imports", email: "michael.ho@goldenbridge.example", phone: "+852 2901 4488", owner: "Marcus", status: "Converted", source: "Webinar", expectedValue: 12800000, nextFollowUp: "2026-08-06" },
+  { id: "sl-006", campaignId: "camp-2", name: "Rachel Ng", company: "Oriental Foods International", email: "rachel.ng@oriental.example", phone: "+852 2110 6633", owner: "Marcus", status: "Contacted", source: "Webinar", expectedValue: 4800000, nextFollowUp: "2026-08-14" },
+  { id: "sl-007", campaignId: "camp-3", name: "Emma Zhang", company: "Nova Technology Asia", email: "emma.zhang@nova.example", phone: "+852 3108 5506", owner: "Jenny", status: "Qualified", source: "Forum", expectedValue: 25000000, nextFollowUp: "2026-08-15" },
+  { id: "sl-008", campaignId: "camp-3", name: "Thomas Yip", company: "Greenfield Properties", email: "thomas.yip@greenfield.example", phone: "+852 2777 8822", owner: "Jenny", status: "Contacted", source: "Forum", expectedValue: 32000000, nextFollowUp: "2026-08-18" },
+  { id: "sl-009", campaignId: "camp-4", name: "Grace Lam", company: "Pioneer Healthcare Group", email: "grace.lam@pioneer.example", phone: "+852 2668 9900", owner: "David", status: "Lost", source: "Direct Mail", expectedValue: 5500000, nextFollowUp: "2026-08-20" },
+  { id: "sl-010", campaignId: "camp-4", name: "Brian Cheung", company: "Summit Engineering Ltd", email: "brian.cheung@summit.example", phone: "+852 2881 4567", owner: "David", status: "New", source: "Website", expectedValue: 11000000, nextFollowUp: "2026-08-21" },
+];
+const SAMPLE_CONTACT_HISTORY: ContactHistory[] = [
+  { id: "ch-001", salesLeadId: "sl-001", contactedAt: "2026-08-01T10:00", type: "Call", subject: "Initial financing discussion", outcome: "Client requested a term sheet", nextAction: "Prepare indicative pricing", owner: "Jenny" },
+  { id: "ch-002", salesLeadId: "sl-001", contactedAt: "2026-08-03T14:30", type: "Meeting", subject: "Working capital needs review", outcome: "Qualified HKD 18M opportunity", nextAction: "Collect financial statements", owner: "Jenny" },
+  { id: "ch-003", salesLeadId: "sl-002", contactedAt: "2026-08-02T09:15", type: "Email", subject: "Campaign introduction", outcome: "CFO expressed interest", nextAction: "Arrange discovery call", owner: "Jenny" },
+  { id: "ch-004", salesLeadId: "sl-002", contactedAt: "2026-08-05T11:30", type: "Call", subject: "Discovery call", outcome: "Short-term funding need confirmed", nextAction: "Send product proposal", owner: "Jenny" },
+  { id: "ch-005", salesLeadId: "sl-003", contactedAt: "2026-08-06T15:00", type: "Email", subject: "Referral follow-up", outcome: "Awaiting response", nextAction: "Call next week", owner: "Jenny" },
+  { id: "ch-006", salesLeadId: "sl-004", contactedAt: "2026-08-04T11:00", type: "Call", subject: "Webinar follow-up", outcome: "Trade line requirements identified", nextAction: "Schedule product demo", owner: "Marcus" },
+  { id: "ch-007", salesLeadId: "sl-005", contactedAt: "2026-08-01T16:00", type: "Visit", subject: "Facility documentation", outcome: "Application signed", nextAction: "Submit for credit approval", owner: "Marcus" },
+  { id: "ch-008", salesLeadId: "sl-005", contactedAt: "2026-08-05T09:30", type: "Note", subject: "Credit submission update", outcome: "Pre-screening passed", nextAction: "Complete full credit paper", owner: "Marcus" },
+  { id: "ch-009", salesLeadId: "sl-006", contactedAt: "2026-08-07T10:45", type: "Email", subject: "Trade solution materials", outcome: "Materials delivered", nextAction: "Confirm demo date", owner: "Marcus" },
+  { id: "ch-010", salesLeadId: "sl-007", contactedAt: "2026-08-03T15:45", type: "Meeting", subject: "Sustainability-linked loan", outcome: "KPI framework under review", nextAction: "Engage sustainability advisor", owner: "Jenny" },
+  { id: "ch-011", salesLeadId: "sl-007", contactedAt: "2026-08-06T13:00", type: "Call", subject: "KPI framework follow-up", outcome: "Carbon target data available", nextAction: "Draft SLL structure", owner: "Jenny" },
+  { id: "ch-012", salesLeadId: "sl-008", contactedAt: "2026-08-05T14:00", type: "Visit", subject: "Green building financing", outcome: "Two eligible projects identified", nextAction: "Request project documents", owner: "Jenny" },
+  { id: "ch-013", salesLeadId: "sl-009", contactedAt: "2026-08-02T16:30", type: "Call", subject: "Campaign response", outcome: "No current financing requirement", nextAction: "Revisit next quarter", owner: "David" },
+  { id: "ch-014", salesLeadId: "sl-010", contactedAt: "2026-08-07T09:00", type: "Email", subject: "Website enquiry acknowledgement", outcome: "Introductory pack sent", nextAction: "Qualify opportunity", owner: "David" },
+];
 const CLIENTS_STORAGE_KEY = "crm-demo-clients";
 const LEADS_STORAGE_KEY = "crm-demo-leads";
 const CONTACTS_STORAGE_KEY = "crm-demo-contacts";
@@ -6132,23 +6278,10 @@ function AccountsWorkspace({
   const [editing, setEditing] = useState<{ account: Account; mode: "create" | "edit" } | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [returnToHome, setReturnToHome] = useState(false);
-  const [appliedRelatedRules, setAppliedRelatedRules] = useState<RelatedModuleRule[]>([]);
-  const [sidebarColumnFilters, setSidebarColumnFilters] = useState<ColumnFilters>({});
   useEffect(() => {
     savePersistedRecords(CLIENTS_STORAGE_KEY, rows);
   }, [rows]);
   const viewRows = view === "Active Clients" ? rows.filter((account) => account.status === "Active") : rows;
-  const relatedFilteredRows = useMemo(
-    () => applyRelatedModuleFilters(viewRows, "accounts", appliedRelatedRules),
-    [viewRows, appliedRelatedRules],
-  );
-  const filteredViewRows = useMemo(
-    () => applyColumnSortFilter(relatedFilteredRows, accountColumns, null, sidebarColumnFilters, getAccountCellValue),
-    [relatedFilteredRows, sidebarColumnFilters],
-  );
-  const { activeTab } = useContext(ModuleViewTabContext);
-  const actionsHost = useContext(ModuleViewActionsHostContext);
-  const { filtersOpen } = useContext(ModuleFilterPanelContext);
 
   useEffect(() => {
     if (createIntentId == null) return;
@@ -6250,54 +6383,6 @@ function AccountsWorkspace({
     />
   ) : null;
 
-  if (activeTab === "Kanban") {
-    return (
-      <>
-        {actionsHost
-          ? createPortal(
-              <ListCreateButton
-                createLabel="Create Client"
-                importLabel="Import Clients"
-                onCreate={startCreate}
-                onImport={() => setImportOpen(true)}
-              />,
-              actionsHost,
-            )
-          : null}
-        <div className={`record-layout ${filtersOpen ? "" : "is-filters-hidden"}`}>
-          {filtersOpen ? (
-            <FilterPanel
-              title="Filter Clients by"
-              filters={["Company Name", "Status", "Client Status", "Segment", "Risk Rating", "Region"]}
-              filterColumns={accountColumns.filter((column) => column.type !== "checkbox" && isColumnFilterable(column))}
-              columnFilters={sidebarColumnFilters}
-              onColumnFilterChange={(key, next) => {
-                setSidebarColumnFilters((prev) => {
-                  const copy = { ...prev };
-                  if (!next) delete copy[key];
-                  else copy[key] = next;
-                  return copy;
-                });
-              }}
-              moduleKey="accounts"
-              appliedRelatedRules={appliedRelatedRules}
-              onApplyRelatedRules={setAppliedRelatedRules}
-              onClearRelatedRules={() => setAppliedRelatedRules([])}
-            />
-          ) : null}
-          <ClientKanbanBoard
-            clients={filteredViewRows}
-            onOpenClient={(client) => {
-              setEditing({ account: { ...client }, mode: "edit" });
-              setReturnToHome(false);
-            }}
-          />
-        </div>
-        {clientModals}
-      </>
-    );
-  }
-
   return (
     <>
       <RecordListShell
@@ -6334,6 +6419,7 @@ function AccountsWorkspace({
         onCreate={startCreate}
         onImport={() => setImportOpen(true)}
         onExport={exportClients}
+        onMassDelete={(ids) => setRows((prev) => prev.filter((item) => !ids.includes(item.id)))}
         renderRows={(visibleRows, orderedColumns) => (
           <tbody>
             {visibleRows.map((account) => (
@@ -6358,11 +6444,10 @@ function AccountsWorkspace({
                     return <RiskRatingTd key={column.key} value={raw} />;
                   }
                   if (column.key === "status") {
-                    return <AccountStatusTd key={column.key} value={account.status} />;
+                    return <td key={column.key}>{account.status}</td>;
                   }
                   if (column.key === "clientStatus") {
-                    const raw = account.clientStatus;
-                    return <ClientStatusTd key={column.key} value={raw} />;
+                    return <td key={column.key}>{account.clientStatus}</td>;
                   }
                   if (column.key === "kycStatus") {
                     const raw = account.kycStatus;
@@ -7114,6 +7199,34 @@ function ImportDealsModal({
 }
 
 
+const LOAN_VIEW_DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
+  select: 72,
+  name: 210,
+  stage: 130,
+  facilityNumber: 150,
+  account: 180,
+  businessUnit: 145,
+  productType: 150,
+  amount: 125,
+  currency: 100,
+  facilityStatus: 135,
+  riskGrade: 110,
+  internalRating: 135,
+  owner: 135,
+  bookingBranch: 150,
+  guarantor: 165,
+  utilizationPct: 120,
+  closingDate: 125,
+  nextReviewDate: 125,
+  interestRate: 120,
+  purpose: 170,
+  approvalAuthority: 170,
+  syndicated: 110,
+  contact: 150,
+  rateType: 110,
+  tenorMonths: 135,
+};
+
 function buildDealColumns(config: ProductPipelineConfig): ColumnDef[] {
   return [
     { key: "select", header: "", type: "checkbox" },
@@ -7336,6 +7449,7 @@ function LoanFormPage({
 }) {
   const [draft, setDraft] = useState<Deal>(() => ({ ...loan }));
   const [attempted, setAttempted] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const nameError = attempted && !draft.name.trim();
   const accountError = attempted && !draft.account.trim();
@@ -7421,26 +7535,36 @@ function LoanFormPage({
   }
 
   function handleSave() {
+    if (isSaving) return;
     const saved = buildSavedLoan();
     if (!saved) return;
-    onSave(saved);
-    onClose();
+    setIsSaving(true);
+    window.setTimeout(() => {
+      onSave(saved);
+      setDraft(saved);
+      setAttempted(false);
+      setIsSaving(false);
+    }, 800);
   }
 
   function handleNextStage() {
-    if (!nextStage) return;
+    if (!nextStage || isSaving) return;
     setStage(nextStage);
   }
 
   function handleFinish() {
+    if (isSaving) return;
     const saved = buildSavedLoan({
       stage: "Completion",
       probability: config.stageProbability.Completion ?? 100,
       facilityStatus: draft.facilityStatus === "Pipeline" ? "Committed" : draft.facilityStatus,
     });
     if (!saved) return;
-    onSave(saved);
-    onClose();
+    setIsSaving(true);
+    window.setTimeout(() => {
+      onSave(saved);
+      onClose();
+    }, 800);
   }
 
   return (
@@ -7459,27 +7583,37 @@ function LoanFormPage({
         </div>
         <div className="client-form-actions">
           <span className="loan-form-probability">{draft.probability}% probability</span>
+          <button type="button" className="client-form-action client-save-button" onClick={handleSave} disabled={isSaving} aria-busy={isSaving}>
+            {isSaving ? <LoaderCircle className="client-save-spinner" size={15} aria-hidden="true" /> : <Check size={15} aria-hidden="true" />}
+            <span>{isSaving ? "Saving" : "Save"}</span>
+          </button>
           {isCompletion ? (
-            <button type="button" className="loan-form-finish-button" onClick={handleFinish}>
+            <button type="button" className="client-form-action" onClick={handleFinish} disabled={isSaving}>
               <Check size={15} strokeWidth={2.4} />
-              Finish
+              <span>Finish</span>
             </button>
           ) : (
             <button
               type="button"
-              className="loan-form-next-button"
+              className="client-form-action"
               onClick={handleNextStage}
-              disabled={!nextStage}
+              disabled={!nextStage || isSaving}
             >
-              Next Stage
+              <span>Next Stage</span>
               <ChevronRight size={15} strokeWidth={2.4} />
             </button>
           )}
-          <button type="button" className="primary-button" onClick={handleSave}>
-            Save
-          </button>
         </div>
       </header>
+
+      {isSaving ? (
+        <div className="client-save-loading-overlay" role="status" aria-live="polite" aria-label="Saving loan">
+          <div className="client-save-loading-card">
+            <LoaderCircle className="client-save-overlay-spinner" size={30} aria-hidden="true" />
+            <span>Saving loan…</span>
+          </div>
+        </div>
+      ) : null}
 
       <div className="loan-form-stage-rail">
         <LoanFormStageTrail
@@ -8026,6 +8160,8 @@ function LoanFacilityNestedTable({
       wrapClassName="table-wrap is-loan-facility-nested"
       tableClassName="list-table loan-facility-table"
       columns={columns}
+      data={visibleFacilities}
+      getCellValue={(row, key) => getLoanFacilityCellValue(row as LoanFacility, key)}
       sort={sort}
       filters={filters}
       dataWidth={140}
@@ -8389,6 +8525,7 @@ function DealsWorkspace({
         createLabel={`Create ${config.recordLabel}`}
         importLabel={`Import ${config.label}`}
         showRowExpandSlot={false}
+        defaultColumnWidths={moduleKey === "deals" ? LOAN_VIEW_DEFAULT_COLUMN_WIDTHS : undefined}
         onCreate={() => {
           setEditing(null);
           setCreating(true);
@@ -8396,6 +8533,7 @@ function DealsWorkspace({
         }}
         onImport={() => setImportOpen(true)}
         onExport={(rows) => exportDeals(config, rows)}
+        onMassDelete={(ids) => commitDealRows((prev) => prev.filter((deal) => !ids.includes(deal.id)))}
         renderRows={(visibleRows, orderedColumns) => (
           <tbody>
             {visibleRows.map((deal) => {
@@ -9135,6 +9273,10 @@ function CampaignWorkspace({
   const [editing, setEditing] = useState<{ campaign: Campaign; mode: "create" | "edit" } | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [returnToHome, setReturnToHome] = useState(false);
+  const [expandedCampaignIds, setExpandedCampaignIds] = useState<Set<string>>(() => new Set());
+  const { activeTab } = useContext(ModuleViewTabContext);
+  const campaignLeads = loadRecordsWithDemoSeeds<SalesLead>(SALES_LEADS_STORAGE_KEY, SAMPLE_SALES_LEADS);
+  const contactHistories = loadRecordsWithDemoSeeds<ContactHistory>(CONTACT_HISTORY_STORAGE_KEY, SAMPLE_CONTACT_HISTORY);
 
   useEffect(() => {
     savePersistedRecords(CAMPAIGNS_STORAGE_KEY, rows);
@@ -9219,6 +9361,10 @@ function CampaignWorkspace({
     );
   }
 
+  if (activeTab === "Report") {
+    return <CampaignReportDashboard campaigns={rows} leads={campaignLeads} histories={contactHistories} />;
+  }
+
   return (
     <>
       <RecordListShell
@@ -9234,9 +9380,11 @@ function CampaignWorkspace({
         onExport={exportCampaigns}
         renderRows={(visibleRows, orderedColumns) => (
           <tbody>
-            {visibleRows.map((row) => (
+            {visibleRows.map((row) => {
+              const relatedLeads = campaignLeads.filter((lead) => lead.campaignId === row.id);
+              const expanded = expandedCampaignIds.has(row.id) && relatedLeads.length > 0;
+              return <Fragment key={row.id}>
               <tr
-                key={row.id}
                 className="is-row-interactive"
                 onDoubleClick={() => {
                   setEditing({ campaign: { ...row }, mode: "edit" });
@@ -9256,10 +9404,13 @@ function CampaignWorkspace({
                     const value = raw == null || raw === "" ? null : String(raw);
                     return <EnumFillTd key={column.key} column={column} value={value} />;
                   }
+                  if (column.key === "name") return <td key={column.key}><span className="loan-name-with-count"><RowExpandTrigger visible={relatedLeads.length > 0} expanded={expanded} label={row.name} onToggle={() => setExpandedCampaignIds((prev) => { const next = new Set(prev); if (next.has(row.id)) next.delete(row.id); else next.add(row.id); return next; })} />{row.name}{relatedLeads.length > 0 ? <span className="loan-facility-count">{relatedLeads.length}</span> : null}</span></td>;
                   return <td key={column.key}>{renderCampaignCell(row, column)}</td>;
                 })}
               </tr>
-            ))}
+              {expanded ? <tr className="loan-facility-expand-row"><td colSpan={orderedColumns.length}><div className="loan-facility-nested"><table className="loan-facility-table event-trigger-nested-table list-table"><thead><tr><th>Sales Lead</th><th>Company</th><th>Status</th><th>Owner</th><th>Expected Value</th><th>Next Follow-up</th></tr></thead><tbody>{relatedLeads.map((lead) => <tr key={lead.id}><td>{lead.name}</td><td>{lead.company}</td><td>{lead.status}</td><td>{lead.owner}</td><td>{lead.expectedValue.toLocaleString()}</td><td>{lead.nextFollowUp}</td></tr>)}</tbody></table></div></td></tr> : null}
+              </Fragment>;
+            })}
           </tbody>
         )}
       />
@@ -9278,6 +9429,37 @@ function CampaignWorkspace({
       ) : null}
     </>
   );
+}
+
+function CampaignReportDashboard({ campaigns: campaignRows, leads: leadRows, histories }: { campaigns: Campaign[]; leads: SalesLead[]; histories: ContactHistory[] }) {
+  const totalValue = leadRows.reduce((sum, lead) => sum + lead.expectedValue, 0);
+  const converted = leadRows.filter((lead) => lead.status === "Converted").length;
+  const conversion = leadRows.length ? Math.round((converted / leadRows.length) * 100) : 0;
+  const statusData = (["New", "Contacted", "Qualified", "Converted", "Lost"] as SalesLeadStatus[]).map((status) => ({ label: status, value: leadRows.filter((lead) => lead.status === status).length }));
+  const maxStatus = Math.max(1, ...statusData.map((item) => item.value));
+  const types = (["Call", "Email", "Meeting", "Visit", "Note"] as ContactHistoryType[]).map((type) => ({ label: type, value: histories.filter((history) => history.type === type).length }));
+  const maxType = Math.max(1, ...types.map((item) => item.value));
+  const performance = campaignRows.map((campaign) => {
+    const campaignLeadRows = leadRows.filter((lead) => lead.campaignId === campaign.id);
+    const count = campaignLeadRows.length || campaign.leadsGenerated;
+    const wins = campaignLeadRows.filter((lead) => lead.status === "Converted").length || campaign.convertedCount;
+    return { campaign, count, wins, rate: count ? Math.round((wins / count) * 100) : 0 };
+  });
+
+  return <section className="campaign-report">
+    <div className="campaign-report-heading"><div><h2>Campaign Performance</h2><p>Campaign, sales lead and contact history overview</p></div><span>Updated {formatHomeDate()}</span></div>
+    <div className="campaign-report-kpis">
+      <article><Megaphone /><span>Campaigns</span><strong>{campaignRows.length}</strong><small>{campaignRows.filter((row) => row.status === "Active").length} active</small></article>
+      <article><Users /><span>Sales Leads</span><strong>{leadRows.length}</strong><small>{conversion}% conversion</small></article>
+      <article><ClipboardClock /><span>Interactions</span><strong>{histories.length}</strong><small>{(histories.length / Math.max(1, leadRows.length)).toFixed(1)} per lead</small></article>
+      <article><CircleDollarSign /><span>Pipeline Value</span><strong>HKD {(totalValue / 1000000).toFixed(1)}M</strong><small>Lead expected value</small></article>
+    </div>
+    <div className="campaign-report-grid">
+      <article className="campaign-report-card"><header><div><strong>Sales lead funnel</strong><span>Current status distribution</span></div><LineChart /></header><div className="report-bars">{statusData.map((item) => <div key={item.label}><span>{item.label}</span><i><b style={{ width: `${Math.max(4, item.value / maxStatus * 100)}%` }} /></i><strong>{item.value}</strong></div>)}</div></article>
+      <article className="campaign-report-card"><header><div><strong>Contact activity</strong><span>Interactions by channel</span></div><Phone /></header><div className="report-columns">{types.map((item) => <div key={item.label}><strong>{item.value}</strong><i><b style={{ height: `${Math.max(8, item.value / maxType * 100)}%` }} /></i><span>{item.label}</span></div>)}</div></article>
+      <article className="campaign-report-card is-wide"><header><div><strong>Campaign conversion</strong><span>Lead generation and conversion results</span></div><Briefcase /></header><div className="campaign-performance-list">{performance.map(({ campaign, count, wins, rate }) => <div key={campaign.id}><span className="campaign-performance-name"><strong>{campaign.name}</strong><small>{campaign.channel} · {campaign.targetSegment ?? "All segments"}</small></span><span><strong>{count}</strong><small>Leads</small></span><span><strong>{wins}</strong><small>Converted</small></span><span className="campaign-rate"><b>{rate}%</b><i><em style={{ width: `${rate}%` }} /></i></span></div>)}</div></article>
+    </div>
+  </section>;
 }
 
 const userColumns: ColumnDef[] = [
@@ -9934,6 +10116,8 @@ function createAuditChange(params: {
   action: AuditChange["action"];
   table: string;
   record: string;
+  oldValue: string;
+  newValue: string;
   changes: AuditFieldChange[];
   source?: string;
 }) {
@@ -10959,6 +11143,71 @@ function ContactsWorkspace({
       {contactModals}
     </>
   );
+}
+
+const salesLeadColumns: ColumnDef[] = [
+  { key: "select", header: "", type: "checkbox" }, { key: "name", header: "Lead Name", type: "text" },
+  { key: "campaignId", header: "Campaign", type: "text" }, { key: "company", header: "Company", type: "text" },
+  { key: "status", header: "Status", type: "enum", enumOptions: ["New", "Contacted", "Qualified", "Converted", "Lost"] },
+  { key: "owner", header: "Owner", type: "text" }, { key: "nextFollowUp", header: "Next Follow-up", type: "date" },
+];
+const contactHistoryColumns: ColumnDef[] = [
+  { key: "select", header: "", type: "checkbox" }, { key: "salesLeadId", header: "Sales Lead", type: "text" },
+  { key: "contactedAt", header: "Contacted At", type: "datetime" }, { key: "type", header: "Type", type: "enum", enumOptions: ["Call", "Email", "Meeting", "Visit", "Note"] },
+  { key: "subject", header: "Subject", type: "text" }, { key: "outcome", header: "Outcome", type: "text" }, { key: "nextAction", header: "Next Action", type: "text" },
+];
+
+function ContactHistoryFormModal({ history, leadName, onClose, onSave }: { history: ContactHistory; leadName: string; onClose: () => void; onSave: (history: ContactHistory) => void }) {
+  const [draft, setDraft] = useState(history);
+  const update = <K extends keyof ContactHistory>(key: K, value: ContactHistory[K]) => setDraft((prev) => ({ ...prev, [key]: value }));
+  return createPortal(
+    <div className="modal-backdrop" onClick={onClose}>
+      <section className="modal-card client-form-modal" onClick={(event) => event.stopPropagation()}>
+        <header className="client-form-header"><div><h2>New Contact History</h2><p>Log a new interaction for {leadName}</p></div><button type="button" className="icon-button" onClick={onClose}><X size={18} /></button></header>
+        <div className="client-form-body"><section className="client-form-section"><div className="client-form-grid">
+          <div className="form-row"><label>Contacted At</label><input className="field" type="datetime-local" value={draft.contactedAt} onChange={(event) => update("contactedAt", event.target.value)} /></div>
+          <div className="form-row"><label>Type</label><select className="field" value={draft.type} onChange={(event) => update("type", event.target.value as ContactHistoryType)}>{["Call", "Email", "Meeting", "Visit", "Note"].map((type) => <option key={type}>{type}</option>)}</select></div>
+          <div className="form-row client-form-span-2"><label>Subject</label><input className="field" value={draft.subject} onChange={(event) => update("subject", event.target.value)} autoFocus /></div>
+          <div className="form-row client-form-span-2"><label>Outcome</label><textarea className="field" value={draft.outcome} onChange={(event) => update("outcome", event.target.value)} /></div>
+          <div className="form-row client-form-span-2"><label>Next Action</label><textarea className="field" value={draft.nextAction} onChange={(event) => update("nextAction", event.target.value)} /></div>
+          <div className="form-row"><label>Owner</label><input className="field" value={draft.owner} onChange={(event) => update("owner", event.target.value)} /></div>
+        </div></section></div>
+        <footer className="client-form-footer"><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button type="button" className="primary-button" disabled={!draft.subject.trim()} onClick={() => onSave(draft)}>Save</button></footer>
+      </section>
+    </div>, document.body,
+  );
+}
+
+function EventTriggerWorkspace({ module }: { module: "salesLeads" | "contactHistory" }) {
+  const isLead = module === "salesLeads";
+  const [leadRows, setLeadRows] = useState<SalesLead[]>(() => loadRecordsWithDemoSeeds(SALES_LEADS_STORAGE_KEY, SAMPLE_SALES_LEADS));
+  const [historyRows, setHistoryRows] = useState<ContactHistory[]>(() => loadRecordsWithDemoSeeds(CONTACT_HISTORY_STORAGE_KEY, SAMPLE_CONTACT_HISTORY));
+  const [expandedLeadIds, setExpandedLeadIds] = useState<Set<string>>(() => new Set());
+  const [historyForm, setHistoryForm] = useState<{ history: ContactHistory; leadName: string } | null>(null);
+  const [historyNestedColumns, setHistoryNestedColumns] = useState<ColumnDef[]>(() => contactHistoryColumns.filter((column) => column.key !== "salesLeadId"));
+  const rows = isLead ? leadRows : historyRows;
+  const columns = isLead ? salesLeadColumns : contactHistoryColumns;
+  useEffect(() => { savePersistedRecords(SALES_LEADS_STORAGE_KEY, leadRows); }, [leadRows]);
+  useEffect(() => { savePersistedRecords(CONTACT_HISTORY_STORAGE_KEY, historyRows); }, [historyRows]);
+  const getValue = (row: SalesLead | ContactHistory, key: string) => String(row[key as keyof typeof row] ?? "");
+  function create() {
+    if (isLead) {
+      const campaign = campaigns[0];
+      const next: SalesLead = { id: `sl-${Date.now()}`, campaignId: campaign?.name ?? "", name: "Untitled Sales Lead", company: "", email: "", phone: "", owner: "Jenny", status: "New", source: "Campaign", expectedValue: 0, nextFollowUp: "" };
+      setLeadRows((prev) => [next, ...prev]);
+    } else {
+      const lead = leadRows[0];
+      const next: ContactHistory = { id: `ch-${Date.now()}`, salesLeadId: lead?.name ?? "", contactedAt: new Date().toISOString().slice(0, 16), type: "Call", subject: "New contact", outcome: "", nextAction: "", owner: "Jenny" };
+      setHistoryRows((prev) => [next, ...prev]);
+    }
+  }
+  const workspace = <RecordListShell title={isLead ? "All Sales Leads" : "All Contact History"} filters={columns.filter((c) => c.type !== "checkbox").map((c) => c.header)} data={rows} columns={columns} getCellValue={getValue} onCreate={create} createLabel={isLead ? "Create Sales Lead" : "Create Contact History"} renderRows={(visible, ordered) => <tbody>{visible.map((row) => {
+    const lead = row as SalesLead;
+    const histories = isLead ? historyRows.filter((history) => history.salesLeadId === lead.id) : [];
+    const expanded = isLead && expandedLeadIds.has(lead.id) && histories.length > 0;
+    return <Fragment key={row.id}><tr>{ordered.map((column) => column.key === "select" ? <td key={column.key} className="is-row-actions-col"><RowSelectCell context={{ id: row.id, label: getValue(row, isLead ? "name" : "subject") }} onDelete={() => isLead ? setLeadRows((prev) => prev.filter((item) => item.id !== row.id)) : setHistoryRows((prev) => prev.filter((item) => item.id !== row.id))} /></td> : isLead && column.key === "name" ? <td key={column.key}><span className="loan-name-with-count"><RowExpandTrigger visible={histories.length > 0} expanded={expanded} label={lead.name} onToggle={() => setExpandedLeadIds((prev) => { const next = new Set(prev); if (next.has(lead.id)) next.delete(lead.id); else next.add(lead.id); return next; })} />{lead.name}{histories.length > 0 ? <span className="loan-facility-count">{histories.length}</span> : null}</span></td> : <td key={column.key}>{getValue(row, column.key)}</td>)}</tr>{expanded ? <tr className="loan-facility-expand-row"><td colSpan={ordered.length}><div className="loan-facility-nested"><ResizableTable columns={historyNestedColumns} data={histories} getCellValue={(history, key) => String(history[key as keyof ContactHistory] ?? "")} dataWidth={150} wrapClassName="table-wrap is-loan-facility-nested" tableClassName="list-table loan-facility-table" onColumnsReorder={setHistoryNestedColumns}><tbody>{histories.map((history) => <tr key={history.id}>{historyNestedColumns.map((column) => column.key === "select" ? <td key={column.key} className="is-row-actions-col event-trigger-compact-actions"><RowSelectCell context={{ id: history.id, label: history.subject, relatedTo: lead.name }} showCheckbox={false} onNew={() => setHistoryForm({ leadName: lead.name, history: { id: `ch-${Date.now()}`, salesLeadId: lead.id, contactedAt: new Date().toISOString().slice(0, 16), type: "Call", subject: "", outcome: "", nextAction: "", owner: lead.owner } })} onDelete={() => setHistoryRows((prev) => prev.filter((item) => item.id !== history.id))} /></td> : <td key={column.key}>{String(history[column.key as keyof ContactHistory] ?? "")}</td>)}</tr>)}</tbody></ResizableTable></div></td></tr> : null}</Fragment>;
+  })}</tbody>} />;
+  return <>{workspace}{historyForm ? <ContactHistoryFormModal history={historyForm.history} leadName={historyForm.leadName} onClose={() => setHistoryForm(null)} onSave={(next) => { setHistoryRows((prev) => [next, ...prev]); setHistoryForm(null); }} /> : null}</>;
 }
 
 function Placeholder({ title, description }: { title: string; description?: string }) {
