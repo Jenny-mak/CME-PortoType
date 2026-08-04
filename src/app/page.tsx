@@ -36,6 +36,7 @@ import {
   Play,
   Plus,
   RefreshCcw,
+  LoaderCircle,
   Search,
   Ship,
   Sparkles,
@@ -3457,16 +3458,42 @@ function LeadTimeline() {
   );
 }
 
-const COLUMN_WIDTH_OVERRIDES: Record<string, number> = {
-  stage: 118,
-  facilityNumber: 124,
-};
+function estimateTableTextWidth(value: string) {
+  let units = 0;
+  for (const char of value) units += /[^\u0000-\u00ff]/.test(char) ? 2 : 1;
+  return Math.ceil(units * 7.2);
+}
 
-function getDefaultColumnWidths(columns: ColumnDef[], dataWidth = 180) {
+function getDefaultColumnWidths<T>(
+  columns: ColumnDef[],
+  data: T[] = [],
+  getCellValue?: (row: T, key: string) => string | number,
+) {
   return Object.fromEntries(
     columns.map((column) => {
       if (column.type === "checkbox") return [column.key, 72];
-      return [column.key, COLUMN_WIDTH_OVERRIDES[column.key] ?? dataWidth];
+
+      const headerTextWidth = estimateTableTextWidth(column.header);
+      // Keep short-content columns close to the actual header width. The extra
+      // space covers the drag handle, filter state, and sort icon only.
+      const headerWidth = headerTextWidth + 24;
+      const hasLongerContent =
+        getCellValue != null &&
+        data.some((row) => {
+          const value = getCellValue(row, column.key);
+          return estimateTableTextWidth(value == null ? "" : String(value)) > headerWidth;
+        });
+      const currentWidth = hasLongerContent ? headerWidth * 1.2 : headerWidth;
+      const hasThreeLineContent =
+        getCellValue != null &&
+        data.some((row) => {
+          const value = getCellValue(row, column.key);
+          const contentWidth = estimateTableTextWidth(value == null ? "" : String(value));
+          return contentWidth > Math.max(1, currentWidth - 24) * 2;
+        });
+      const defaultWidth = hasThreeLineContent ? currentWidth * 1.5 : currentWidth;
+
+      return [column.key, Math.min(540, Math.max(72, Math.ceil(defaultWidth)))];
     }),
   ) as Record<string, number>;
 }
@@ -3752,9 +3779,11 @@ function ColumnFieldMenu({
   );
 }
 
-function ResizableTable({
+function ResizableTable<T>({
   columns,
   children,
+  data,
+  getCellValue,
   dataWidth = 180,
   sort,
   filters,
@@ -3765,6 +3794,8 @@ function ResizableTable({
 }: {
   columns: ColumnDef[];
   children: React.ReactNode;
+  data: T[];
+  getCellValue: (row: T, key: string) => string | number;
   dataWidth?: number;
   sort: SortState;
   filters: ColumnFilters;
@@ -3780,7 +3811,9 @@ function ResizableTable({
         .join("\0"),
     [columns],
   );
-  const [widths, setWidths] = useState(() => getDefaultColumnWidths(columns, dataWidth));
+  const [widths, setWidths] = useState(() =>
+    getDefaultColumnWidths(columns, data, getCellValue),
+  );
   const [activeDivider, setActiveDivider] = useState<string | null>(null);
   const [resizingKey, setResizingKey] = useState<string | null>(null);
   const [openFilterKey, setOpenFilterKey] = useState<string | null>(null);
@@ -3794,7 +3827,7 @@ function ResizableTable({
 
   useEffect(() => {
     setWidths((prev) => {
-      const defaults = getDefaultColumnWidths(columns, dataWidth);
+      const defaults = getDefaultColumnWidths(columns, data, getCellValue, dataWidth);
       if (showRowExpandSlot && defaults.select != null) {
         defaults.select = 84;
       }
@@ -3804,9 +3837,6 @@ function ResizableTable({
       }
       if (showRowExpandSlot) {
         next.select = 84;
-      }
-      for (const [key, width] of Object.entries(COLUMN_WIDTH_OVERRIDES)) {
-        if (next[key] != null) next[key] = width;
       }
       return next;
     });
@@ -3952,6 +3982,12 @@ function ResizableTable({
       <div
         ref={tableWrapRef}
         className="table-x-scroll"
+        onMouseOver={(event) => {
+          const cell = (event.target as HTMLElement).closest<HTMLTableCellElement>("td");
+          if (!cell) return;
+          const hasOverflow = cell.scrollWidth > cell.clientWidth || cell.scrollHeight > cell.clientHeight;
+          if (hasOverflow && !cell.title) cell.title = cell.innerText.trim();
+        }}
         onScroll={(event) => {
           event.currentTarget.style.setProperty("--table-scroll-left", `${event.currentTarget.scrollLeft}px`);
         }}
@@ -4338,6 +4374,8 @@ function RecordListShell<T extends { id: string }>({
           <RowSelectionProvider pageIds={pageIds} allIds={allIds}>
             <ResizableTable
               columns={orderedColumns}
+              data={data}
+              getCellValue={getCellValue}
               sort={sort}
               filters={columnFilters}
               showRowExpandSlot={showRowExpandSlot}
@@ -5357,21 +5395,29 @@ function ClientFormPage({
     [account, mode],
   );
   const [draft, setDraft] = useState<ClientFormDraft>(() => initialDraft);
+  const [savedDraft, setSavedDraft] = useState<ClientFormDraft>(() => initialDraft);
   const [attempted, setAttempted] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [relatedListVisible, setRelatedListVisible] = useState(true);
   const [detailTab, setDetailTab] = useState<"overview" | "timeline">("overview");
   const [refreshingRelatedCard, setRefreshingRelatedCard] = useState<string | null>(null);
   const [activeRelatedCard, setActiveRelatedCard] = useState<string | null>(null);
   const [creatingRelated, setCreatingRelated] = useState<ClientRelatedCard | null>(null);
+  const formBodyRef = useRef<HTMLDivElement>(null);
 
-  const companyNameError = attempted && !draft.companyName.trim();
   const emailValue = draft.email.trim();
-  const emailError = attempted && emailValue !== "" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue);
-  const statusError = attempted && !draft.status;
-  const clientStatusError = attempted && !draft.clientStatus;
-  const isDirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(initialDraft), [draft, initialDraft]);
+  const hasCompanyNameError = !draft.companyName.trim();
+  const hasEmailError = emailValue !== "" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue);
+  const hasStatusError = !draft.status;
+  const hasClientStatusError = !draft.clientStatus;
+  const hasValidationErrors = hasCompanyNameError || hasEmailError || hasStatusError || hasClientStatusError;
+  const companyNameError = attempted && hasCompanyNameError;
+  const emailError = attempted && hasEmailError;
+  const statusError = attempted && hasStatusError;
+  const clientStatusError = attempted && hasClientStatusError;
+  const isDirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(savedDraft), [draft, savedDraft]);
   const relatedCards = buildClientRelatedCards(draft.companyName || account.companyName);
   const formStateClass = isDirty ? "is-editing" : "is-pristine";
   const recordTitle = mode === "create" ? "Create Client" : `Client. ${account.companyName.trim() || "Company Name"}`;
@@ -5437,26 +5483,36 @@ function ClientFormPage({
     setCreatingRelated(null);
   }
 
+  function handleRefresh() {
+    if (isSaving || isRefreshing) return;
+    setIsRefreshing(true);
+    window.setTimeout(() => {
+      setDraft(savedDraft);
+      setAttempted(false);
+      setIsRefreshing(false);
+    }, 500);
+  }
+
   function handleSave(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
-    if (isSaving || !isDirty) return;
+    if (isSaving || isRefreshing || !isDirty) return;
     setAttempted(true);
-    const companyName = draft.companyName.trim();
-    if (!companyName || !draft.status || !draft.clientStatus) return;
+    if (hasValidationErrors) return;
     const next = {
       ...draft,
-      companyName,
-      status: draft.status,
-      clientStatus: draft.clientStatus,
+      companyName: draft.companyName.trim(),
+      status: draft.status!,
+      clientStatus: draft.clientStatus!,
     };
     setIsSaving(true);
     window.setTimeout(() => {
       onSave(next);
-      initialDraftRef.current = next;
       setDraft(next);
+      setSavedDraft(next);
+      setAttempted(false);
       setSavedAt(`${formatHomeDate()} ${formatHomeTime()}`);
       setIsSaving(false);
-    }, 220);
+    }, 800);
   }
 
   if (creatingRelated && creatingRelated.key !== "Task" && creatingRelated.key !== "Meeting") {
@@ -5506,14 +5562,36 @@ function ClientFormPage({
           </div>
         </div>
         <div className="client-form-actions">
-          <button type="button" className="secondary-button" onClick={onClose} disabled={isSaving}>Cancel</button>
-          <button type="submit" className={`primary-button ${isSaving ? "is-saving" : ""}`} disabled={isSaving}>
-            {isSaving ? <span className="button-spinner" aria-hidden="true" /> : null}
-            <span>Save</span>
+          <button type="submit" className="client-form-action client-save-button" disabled={isSaving || isRefreshing || !isDirty} aria-busy={isSaving}>
+            {isSaving ? <LoaderCircle className="client-save-spinner" size={15} aria-hidden="true" /> : <Check size={15} aria-hidden="true" />}
+            <span>{isSaving ? "Saving" : "Save"}</span>
           </button>
-          <button type="button" className="icon-button client-form-more" aria-label="More actions" disabled={isSaving}><MoreHorizontal size={18} /></button>
+          <button type="button" className="client-form-action" onClick={onClose} disabled={isSaving || isRefreshing}>
+            <X size={15} aria-hidden="true" />
+            <span>Cancel</span>
+          </button>
+          <button
+            type="button"
+            className="client-form-action client-form-refresh"
+            onClick={handleRefresh}
+            disabled={isSaving || isRefreshing}
+            aria-label="Refresh client form"
+            title="Refresh"
+          >
+            <RefreshCcw className={isRefreshing ? "client-save-spinner" : undefined} size={15} />
+            <span>Refresh</span>
+          </button>
         </div>
       </header>
+
+      {isSaving ? (
+        <div className="client-save-loading-overlay" role="status" aria-live="polite" aria-label="Saving client">
+          <div className="client-save-loading-card">
+            <LoaderCircle className="client-save-overlay-spinner" size={30} aria-hidden="true" />
+            <span>Saving client…</span>
+          </div>
+        </div>
+      ) : null}
 
       <div className={`client-record-layout ${relatedListVisible ? "" : "is-related-collapsed"}`}>
         {relatedListVisible ? (
@@ -5574,7 +5652,19 @@ function ClientFormPage({
                 </span>
               </button>
               <div className="client-form-tabs">
-                <button type="button" className={detailTab === "overview" ? "is-active" : ""} onClick={() => setDetailTab("overview")}>Overview</button>
+                <button
+                  type="button"
+                  className={detailTab === "overview" ? "is-active" : ""}
+                  onClick={() => {
+                    setDetailTab("overview");
+                    setActiveRelatedCard(null);
+                    window.requestAnimationFrame(() => {
+                      formBodyRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+                    });
+                  }}
+                >
+                  Overview
+                </button>
                 <button type="button" className={detailTab === "timeline" ? "is-active" : ""} onClick={() => setDetailTab("timeline")}>Timeline</button>
               </div>
             </div>
@@ -5583,7 +5673,7 @@ function ClientFormPage({
               {savedAt ? `Saved ${savedAt}` : `Last Update: ${formatHomeDate()} ${formatHomeTime()}`}
             </span>
           </div>
-          <div className="client-form-body">
+          <div className="client-form-body" ref={formBodyRef}>
             {detailTab === "overview" ? (
               <>
                 <section className={`client-form-card ${clientStatusError || statusError ? "is-invalid" : ""}`}>
@@ -5991,6 +6081,17 @@ function savePersistedRecords<T>(storageKey: string, rows: T[]) {
   }
 }
 
+function loadRecordsWithNewDemoSeeds<T extends { id: string }>(storageKey: string, seeds: T[]) {
+  const persisted = loadPersistedRecords<T>(storageKey);
+  if (!persisted) return [...seeds];
+
+  const existingIds = new Set(persisted.map((row) => row.id));
+  const newDemoRows = seeds.filter(
+    (row) => row.id.includes("-report-") && !existingIds.has(row.id),
+  );
+  return [...persisted, ...newDemoRows];
+}
+
 const CLIENTS_STORAGE_KEY = "crm-demo-clients";
 const LEADS_STORAGE_KEY = "crm-demo-leads";
 const CONTACTS_STORAGE_KEY = "crm-demo-contacts";
@@ -6015,7 +6116,9 @@ function AccountsWorkspace({
   onRecordHandled?: () => void;
   onReturnHome?: () => void;
 }) {
-  const [rows, setRows] = useState<Account[]>(() => loadPersistedRecords<Account>(CLIENTS_STORAGE_KEY) ?? [...accounts]);
+  const [rows, setRows] = useState<Account[]>(() =>
+    loadRecordsWithNewDemoSeeds<Account>(CLIENTS_STORAGE_KEY, accounts),
+  );
   const [editing, setEditing] = useState<{ account: Account; mode: "create" | "edit" } | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [returnToHome, setReturnToHome] = useState(false);

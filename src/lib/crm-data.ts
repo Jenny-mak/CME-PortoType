@@ -1469,6 +1469,190 @@ export const campaigns: Campaign[] = [
   },
 ];
 
+// Add a broad, deterministic demo population so every list and report has enough
+// distribution across status, owner, region, stage, risk, and time to be meaningful.
+const reportOwners = ["Jenny", "Donna", "James", "Mitsu", "Leota", "Zhangwei"];
+const reportCities = ["Central", "Kowloon", "Singapore", "Shanghai", "London", "New York"];
+const reportCompanies = [
+  "Harbour Energy Group",
+  "Meridian Retail Holdings",
+  "Summit Telecom Asia",
+  "Blue River Properties",
+  "Crescent Medical Network",
+  "Atlas Industrial Partners",
+  "Orchid Consumer Brands",
+  "Northstar Digital Services",
+  "Evergreen Resources",
+  "Silverline Logistics",
+  "Pioneer Professional Group",
+  "Horizon Infrastructure",
+];
+
+const extraAccounts: Account[] = reportCompanies.map((companyName, index) => {
+  const template = accounts[index % accounts.length];
+  const id = `acc-report-${index + 1}`;
+  const region = (["Hong Kong", "Singapore", "Mainland China", "Asia Pacific", "Europe", "Americas"] as const)[index % 6];
+  const segment = (["Corporate", "Commercial", "SME", "Private Banking"] as const)[index % 4];
+  return {
+    ...template,
+    id,
+    companyName,
+    status: index % 7 === 0 ? "Inactive" : "Active",
+    clientStatus: (["ETB", "NTB", "NNTB"] as const)[index % 3],
+    relationshipManager: reportOwners[index % reportOwners.length],
+    email: `treasury@${companyName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.example`,
+    phone: `+852 2800 ${String(2100 + index)}`,
+    rating: (["Hot", "Warm", "Cold"] as const)[index % 3],
+    segment,
+    riskRating: (["Low", "Medium", "High"] as const)[index % 3],
+    kycStatus: (["Approved", "In Progress", "Pending", "Expired"] as const)[index % 4],
+    region,
+    city: reportCities[index % reportCities.length],
+    annualRevenue: `HKD ${80 + index * 45}M`,
+    employeeCount: String(180 + index * 137),
+    creditLimit: `HKD ${8 + index * 4}M`,
+    clientSince: `${2015 + (index % 11)}-${String((index % 12) + 1).padStart(2, "0")}-15`,
+    primaryIdNumber: `BR-RPT-${String(index + 1).padStart(4, "0")}`,
+  };
+});
+accounts.push(...extraAccounts);
+
+leads.push(...Array.from({ length: 18 }, (_, index): Lead => {
+  const company = reportCompanies[index % reportCompanies.length];
+  const firstNames = ["Aiden", "Bella", "Caleb", "Diana", "Ethan", "Fiona"];
+  const lastNames = ["Wong", "Tan", "Chen", "Smith", "Patel", "Garcia"];
+  const name = `${firstNames[index % firstNames.length]} ${lastNames[Math.floor(index / 3) % lastNames.length]}`;
+  return {
+    id: `lead-report-${index + 1}`,
+    name,
+    company,
+    email: `${name.toLowerCase().replace(/\s+/g, ".")}@example.com`,
+    phone: `+852 6100 ${String(3000 + index)}`,
+    owner: reportOwners[index % reportOwners.length],
+    status: (["New", "Contacted", "Qualified", "Converted"] as const)[index % 4],
+  };
+}));
+
+contacts.push(...extraAccounts.flatMap((account, accountIndex) =>
+  Array.from({ length: 2 }, (_, contactIndex): Contact => {
+    const index = accountIndex * 2 + contactIndex;
+    const name = `${["Alex", "Jordan", "Taylor", "Morgan"][index % 4]} ${["Lee", "Ng", "Lim", "Ho", "Chan", "Wu"][accountIndex % 6]}`;
+    return {
+      id: `con-report-${index + 1}`,
+      name,
+      title: contactIndex === 0 ? "Chief Financial Officer" : "Treasury Manager",
+      department: contactIndex === 0 ? "Finance" : "Treasury",
+      accountId: account.id,
+      account: account.companyName,
+      email: `${name.toLowerCase().replace(/\s+/g, ".")}@example.com`,
+      phone: `+852 2900 ${String(4000 + index)}`,
+      mobile: `+852 6900 ${String(4000 + index)}`,
+      owner: account.relationshipManager,
+      status: index % 11 === 0 ? "Inactive" : "Active",
+      role: contactIndex === 0 ? "Decision Maker" : "Treasury",
+      preferredChannel: (["Email", "Phone", "Mobile", "In-Person"] as const)[index % 4],
+      region: account.region,
+      decisionMaker: contactIndex === 0,
+      lastContacted: `2026-${String((index % 8) + 1).padStart(2, "0")}-${String((index % 27) + 1).padStart(2, "0")}`,
+      notes: "Report demonstration contact with recent relationship activity.",
+    };
+  }),
+));
+
+tasks.push(...Array.from({ length: 24 }, (_, index): Task => ({
+  id: `task-report-${index + 1}`,
+  subject: ["Review credit proposal", "Complete KYC refresh", "Prepare client meeting", "Follow up documentation", "Update opportunity forecast", "Confirm facility terms"][index % 6],
+  dueDate: `2026-${String((index % 8) + 1).padStart(2, "0")}-${String((index % 27) + 1).padStart(2, "0")}`,
+  status: (["Not Started", "Completed", "Deferred"] as const)[index % 3],
+  priority: (["High", "Normal", "Low"] as const)[index % 3],
+  account: reportCompanies[index % reportCompanies.length],
+})));
+
+meetings.push(...Array.from({ length: 20 }, (_, index): Meeting => ({
+  id: `meeting-report-${index + 1}`,
+  title: ["Annual Review", "Treasury Workshop", "Credit Discussion", "Product Demo", "KYC Review"][index % 5],
+  from: `2026-${String((index % 8) + 1).padStart(2, "0")}-${String((index % 27) + 1).padStart(2, "0")} 10:00 AM`,
+  to: `2026-${String((index % 8) + 1).padStart(2, "0")}-${String((index % 27) + 1).padStart(2, "0")} 11:00 AM`,
+  relatedTo: reportCompanies[index % reportCompanies.length],
+  owner: reportOwners[index % reportOwners.length],
+})));
+
+calls.push(...Array.from({ length: 22 }, (_, index): Call => ({
+  id: `call-report-${index + 1}`,
+  subject: ["Pipeline follow-up", "Client onboarding call", "Facility renewal discussion", "Campaign response", "Document reminder"][index % 5],
+  type: index % 3 === 0 ? "Inbound" : "Outbound",
+  startTime: `2026-${String((index % 8) + 1).padStart(2, "0")}-${String((index % 27) + 1).padStart(2, "0")} 02:30 PM`,
+  duration: `00:${String(5 + (index * 7) % 50).padStart(2, "0")}`,
+})));
+
+const extraDeals = Array.from({ length: 22 }, (_, index): Deal => {
+  const template = deals[index % deals.length];
+  const account = extraAccounts[index % extraAccounts.length];
+  const stage = (["Identification", "Evaluation", "Approval", "Execution", "Completion"] as const)[index % 5];
+  const probability = [10, 25, 50, 75, 100][index % 5];
+  const currency = (["HKD", "USD", "SGD", "CNY"] as const)[index % 4];
+  const amount = 3_000_000 + index * 2_750_000;
+  return {
+    ...template,
+    id: `deal-report-${index + 1}`,
+    name: `${account.companyName} ${["Working Capital", "Capex", "Refinancing", "Trade", "Property"][index % 5]} Facility`,
+    facilityNumber: `LN-2026-${String(100 + index).padStart(3, "0")}`,
+    accountId: account.id,
+    account: account.companyName,
+    owner: reportOwners[index % reportOwners.length],
+    currency,
+    amount,
+    approvedAmount: stage === "Identification" || stage === "Evaluation" ? 0 : Math.round(amount * 0.9),
+    outstandingBalance: stage === "Execution" || stage === "Completion" ? Math.round(amount * 0.62) : 0,
+    stage,
+    probability,
+    riskGrade: (["Low", "Medium", "High"] as const)[index % 3],
+    facilityStatus: stage === "Completion" ? "Drawn" : stage === "Execution" ? "Committed" : "Pipeline",
+    closingDate: `2026-${String((index % 8) + 1).padStart(2, "0")}-${String((index % 27) + 1).padStart(2, "0")}`,
+    updatedAt: `2026-${String((index % 8) + 1).padStart(2, "0")}-15T09:00:00.000Z`,
+  };
+});
+deals.push(...extraDeals);
+
+const productPipelines = [tradeFinanceDeals, paymentServiceDeals, sustainableFinanceDeals, globalMarketDeals, lifeInsuranceDeals];
+productPipelines.forEach((pipeline, pipelineIndex) => {
+  pipeline.push(...Array.from({ length: 8 }, (_, index): Deal => {
+    const source = extraDeals[(pipelineIndex * 4 + index) % extraDeals.length];
+    const prefixes = ["TF", "PS", "SF", "GM", "LI"];
+    return {
+      ...source,
+      id: `${prefixes[pipelineIndex].toLowerCase()}-report-${index + 1}`,
+      name: `${reportCompanies[(index + pipelineIndex) % reportCompanies.length]} ${["Growth", "Renewal", "Regional", "Strategic"][index % 4]} Programme`,
+      facilityNumber: `${prefixes[pipelineIndex]}-2026-${String(100 + index).padStart(3, "0")}`,
+    };
+  }));
+});
+
+campaigns.push(...Array.from({ length: 15 }, (_, index): Campaign => {
+  const template = campaigns[index % campaigns.length];
+  const status = (["Planning", "Active", "Inactive", "Completed", "Aborted"] as const)[index % 5];
+  const sent = 600 + index * 430;
+  const generated = status === "Planning" ? 0 : Math.round(sent * (0.04 + (index % 5) * 0.012));
+  return {
+    ...template,
+    id: `camp-report-${index + 1}`,
+    name: `${["Digital", "Regional", "Client", "Growth", "Partner"][index % 5]} ${["Loans", "Trade", "Payments", "ESG", "Markets"][Math.floor(index / 3) % 5]} Campaign`,
+    code: `CMP-2026-${String(100 + index).padStart(3, "0")}`,
+    owner: reportOwners[index % reportOwners.length],
+    status,
+    channel: (["Email", "Webinar", "In-Person Event", "Phone", "Partner", "Social / Digital Ads", "Direct Mail", "Mixed"] as const)[index % 8],
+    startDate: `2026-${String((index % 8) + 1).padStart(2, "0")}-01`,
+    endDate: `2026-${String((index % 8) + 2).padStart(2, "0")}-28`,
+    expectedRevenue: 8_000_000 + index * 6_500_000,
+    budgetedCost: 80_000 + index * 35_000,
+    actualCost: status === "Planning" ? 0 : 45_000 + index * 22_000,
+    expectedResponsePct: 5 + (index % 8),
+    numSent: sent,
+    leadsGenerated: generated,
+    convertedCount: Math.round(generated * (0.08 + (index % 4) * 0.03)),
+  };
+}));
+
 export const timeline: TimelineEvent[] = [
   { id: "tl-1", time: "03:36 PM", title: "Lead Created", detail: "by Jenny 2026-07-28" },
   { id: "tl-2", time: "03:36 PM", title: "Note added", detail: "yrqwiorywqior by Jenny" },
