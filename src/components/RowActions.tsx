@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronRight, Minus, MoreHorizontal, Plus, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, MoreHorizontal, X } from "lucide-react";
 import {
   createContext,
   useContext,
@@ -575,24 +575,48 @@ function DeleteConfirmModal({
   );
 }
 
+export function RowExpandTrigger({
+  visible,
+  expanded,
+  label,
+  onToggle,
+}: {
+  visible: boolean;
+  expanded: boolean;
+  label: string;
+  onToggle: () => void;
+}) {
+  if (!visible) {
+    return <span className="row-expand-spacer" aria-hidden />;
+  }
+
+  return (
+    <button
+      type="button"
+      className={`row-expand-trigger ${expanded ? "is-expanded" : ""}`}
+      aria-label={expanded ? `Collapse facilities for ${label}` : `Expand facilities for ${label}`}
+      aria-expanded={expanded}
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggle();
+      }}
+    >
+      {expanded ? <ChevronDown size={12} strokeWidth={2} /> : <ChevronRight size={12} strokeWidth={2} />}
+    </button>
+  );
+}
+
 export function RowSelectCell({
   context,
   onEdit,
   onDelete,
-  expand,
 }: {
   context: RowActionContext;
   onEdit?: () => void;
   onDelete?: () => void;
-  expand?: {
-    visible: boolean;
-    expanded: boolean;
-    onToggle: () => void;
-  };
 }) {
   const selection = useRowSelection();
   const checked = selection?.isSelected(context.id) ?? false;
-  const showExpandSlot = Boolean(expand);
 
   return (
     <div className="row-lead-controls" onClick={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
@@ -604,24 +628,6 @@ export function RowSelectCell({
         checked={checked}
         onChange={(event) => selection?.setSelected(context.id, event.target.checked)}
       />
-      {showExpandSlot ? (
-        expand?.visible ? (
-          <button
-            type="button"
-            className={`row-expand-trigger ${expand.expanded ? "is-expanded" : ""}`}
-            aria-label={expand.expanded ? `Collapse facilities for ${context.label}` : `Expand facilities for ${context.label}`}
-            aria-expanded={expand.expanded}
-            onClick={(event) => {
-              event.stopPropagation();
-              expand.onToggle();
-            }}
-          >
-            {expand.expanded ? <Minus size={10} /> : <Plus size={10} />}
-          </button>
-        ) : (
-          <span className="row-expand-spacer" aria-hidden />
-        )
-      ) : null}
     </div>
   );
 }

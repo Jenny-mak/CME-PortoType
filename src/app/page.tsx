@@ -72,7 +72,13 @@ import {
 import { LoanFormStageTrail, LoanKanbanBoard, LoanStageBar } from "@/components/LoanKanbanBoard";
 import { LoginPage } from "@/components/LoginPage";
 import { ReportsWorkspace } from "@/components/ReportsWorkspace";
-import { HeaderSelectCheckbox, RowSelectCell, RowSelectionProvider } from "@/components/RowActions";
+import {
+  HeaderSelectCheckbox,
+  RowActions,
+  RowExpandTrigger,
+  RowSelectCell,
+  RowSelectionProvider,
+} from "@/components/RowActions";
 import { TrainingVideos } from "@/components/TrainingVideos";
 import { clearSessionUser, loadSessionUser, saveSessionUser } from "@/lib/auth";
 import {
@@ -3762,6 +3768,8 @@ function ResizableTable({
   onFilterChange,
   onColumnsReorder,
   showRowExpandSlot = false,
+  wrapClassName = "table-wrap",
+  tableClassName = "list-table",
 }: {
   columns: ColumnDef[];
   children: React.ReactNode;
@@ -3772,6 +3780,8 @@ function ResizableTable({
   onFilterChange: (key: string, next: ColumnFilter | undefined) => void;
   onColumnsReorder: (next: ColumnDef[]) => void;
   showRowExpandSlot?: boolean;
+  wrapClassName?: string;
+  tableClassName?: string;
 }) {
   const columnsIdentity = useMemo(
     () =>
@@ -3947,7 +3957,7 @@ function ResizableTable({
 
   return (
     <div
-      className={`table-wrap ${resizingKey !== null ? "is-resizing-cols" : ""} ${dragKey ? "is-reordering-cols" : ""}`}
+      className={`${wrapClassName} ${resizingKey !== null ? "is-resizing-cols" : ""} ${dragKey ? "is-reordering-cols" : ""}`}
     >
       <div
         ref={tableWrapRef}
@@ -3957,7 +3967,7 @@ function ResizableTable({
         }}
       >
         <div className="table-resize-plane" style={{ width: "100%", minWidth: tableWidth }}>
-          <table className="list-table list-table-header" style={{ width: "100%", minWidth: tableWidth }}>
+          <table className={`${tableClassName} list-table-header`} style={{ width: "100%", minWidth: tableWidth }}>
             {renderColgroup()}
             <thead>
               <tr>
@@ -4075,7 +4085,7 @@ function ResizableTable({
             </thead>
           </table>
           <div className="table-body-scroll">
-            <table className="list-table list-table-body" style={{ width: "100%", minWidth: tableWidth }}>
+            <table className={`${tableClassName} list-table-body`} style={{ width: "100%", minWidth: tableWidth }}>
               {renderColgroup()}
               {children}
             </table>
@@ -6864,6 +6874,38 @@ const LOAN_FACILITY_STATUS_OPTIONS: Deal["facilityStatus"][] = [
   "Fully Repaid",
   "Cancelled",
 ];
+const loanFacilityColumns: ColumnDef[] = [
+  { key: "name", header: "Facility Name", type: "text" },
+  { key: "tranche", header: "Tranche", type: "text" },
+  { key: "facilityType", header: "Facility Type", type: "text" },
+  { key: "amount", header: "Amount", type: "number" },
+  {
+    key: "status",
+    header: "Status",
+    type: "enum",
+    enumOptions: [...LOAN_FACILITY_STATUS_OPTIONS],
+    colorGroup: "soft",
+    optionColors: {
+      Pipeline: 6,
+      Committed: 1,
+      Drawn: 0,
+      "Fully Repaid": 3,
+      Cancelled: 4,
+    },
+  },
+  { key: "greenLoanIndicator", header: "Green Loan Indicator", type: "enum", enumOptions: ["Yes", "No"], colorable: false },
+  { key: "sllIndicator", header: "SLL Indicator", type: "enum", enumOptions: ["Yes", "No"], colorable: false },
+  { key: "creditConnectIndicator", header: "Credit Connect Indicator", type: "enum", enumOptions: ["Yes", "No"], colorable: false },
+  { key: "newIndustrySector", header: "New Industry Sector", type: "text" },
+  { key: "dealType", header: "Deal Type", type: "text" },
+  {
+    key: "currency",
+    header: "Loan Currency",
+    type: "enum",
+    enumOptions: [...LOAN_CURRENCY_OPTIONS],
+    colorable: false,
+  },
+];
 const LOAN_APPROVAL_AUTHORITY_OPTIONS: Deal["approvalAuthority"][] = [
   "RM Discretion",
   "Credit Committee",
@@ -7630,6 +7672,312 @@ function LoanFormPage({
   );
 }
 
+function getLoanFacilityCellValue(facility: LoanFacility, key: string): string | number {
+  if (key === "amount") return facility.amount;
+  const value = facility[key as keyof LoanFacility];
+  return value == null || value === "" ? "" : String(value);
+}
+
+const LOAN_FACILITY_YES_NO_OPTIONS: LoanFacility["greenLoanIndicator"][] = ["Yes", "No"];
+
+function LoanFacilityEditModal({
+  facility,
+  onClose,
+  onSave,
+}: {
+  facility: LoanFacility;
+  onClose: () => void;
+  onSave: (next: LoanFacility) => void;
+}) {
+  const [draft, setDraft] = useState<LoanFacility>(() => ({ ...facility }));
+
+  function update<K extends keyof LoanFacility>(key: K, value: LoanFacility[K]) {
+    setDraft((prev) => ({ ...prev, [key]: value }));
+  }
+
+  return createPortal(
+    <div className="modal-backdrop" onClick={onClose}>
+      <section className="modal-card loan-facility-edit-modal" onClick={(event) => event.stopPropagation()}>
+        <header className="row-action-form-head">
+          <div>
+            <h2>Edit Loan Facility</h2>
+            <p className="muted">{facility.name}</p>
+          </div>
+          <button type="button" className="icon-button" aria-label="Close" onClick={onClose}>
+            <X size={16} />
+          </button>
+        </header>
+        <div className="loan-facility-edit-body">
+          <section className="client-form-section">
+            <div className="client-form-section-head">
+              <strong>Facility Details</strong>
+              <span>Core facility information</span>
+            </div>
+            <div className="client-form-grid">
+              <div className="form-row client-form-span-2">
+                <label htmlFor="lf-edit-name">Facility Name</label>
+                <input
+                  id="lf-edit-name"
+                  className="field"
+                  value={draft.name}
+                  onChange={(event) => update("name", event.target.value)}
+                />
+              </div>
+              <div className="form-row">
+                <label htmlFor="lf-edit-tranche">Tranche</label>
+                <input
+                  id="lf-edit-tranche"
+                  className="field"
+                  value={draft.tranche}
+                  onChange={(event) => update("tranche", event.target.value)}
+                />
+              </div>
+              <div className="form-row">
+                <label htmlFor="lf-edit-facility-type">Facility Type</label>
+                <input
+                  id="lf-edit-facility-type"
+                  className="field"
+                  value={draft.facilityType}
+                  onChange={(event) => update("facilityType", event.target.value)}
+                />
+              </div>
+              <div className="form-row">
+                <label htmlFor="lf-edit-deal-type">Deal Type</label>
+                <input
+                  id="lf-edit-deal-type"
+                  className="field"
+                  value={draft.dealType}
+                  onChange={(event) => update("dealType", event.target.value)}
+                />
+              </div>
+              <div className="form-row client-form-span-2">
+                <label htmlFor="lf-edit-industry">New Industry Sector</label>
+                <input
+                  id="lf-edit-industry"
+                  className="field"
+                  value={draft.newIndustrySector}
+                  onChange={(event) => update("newIndustrySector", event.target.value)}
+                />
+              </div>
+            </div>
+          </section>
+
+          <section className="client-form-section">
+            <div className="client-form-section-head">
+              <strong>Financial</strong>
+              <span>Amount, currency, and status</span>
+            </div>
+            <div className="client-form-grid">
+              <div className="form-row">
+                <label htmlFor="lf-edit-amount">Amount</label>
+                <input
+                  id="lf-edit-amount"
+                  className="field"
+                  type="number"
+                  min={0}
+                  value={draft.amount}
+                  onChange={(event) => update("amount", Number(event.target.value) || 0)}
+                />
+              </div>
+              <div className="form-row">
+                <label htmlFor="lf-edit-currency">Loan Currency</label>
+                <select
+                  id="lf-edit-currency"
+                  className="field"
+                  value={draft.currency}
+                  onChange={(event) => update("currency", event.target.value as LoanFacility["currency"])}
+                >
+                  {LOAN_CURRENCY_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-row client-form-span-2">
+                <label htmlFor="lf-edit-status">Status</label>
+                <select
+                  id="lf-edit-status"
+                  className="field"
+                  value={draft.status}
+                  onChange={(event) => update("status", event.target.value as LoanFacility["status"])}
+                >
+                  {LOAN_FACILITY_STATUS_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </section>
+
+          <section className="client-form-section">
+            <div className="client-form-section-head">
+              <strong>Indicators</strong>
+              <span>Green loan and sustainability flags</span>
+            </div>
+            <div className="client-form-grid">
+              <div className="form-row">
+                <label htmlFor="lf-edit-green">Green Loan Indicator</label>
+                <select
+                  id="lf-edit-green"
+                  className="field"
+                  value={draft.greenLoanIndicator}
+                  onChange={(event) => update("greenLoanIndicator", event.target.value as LoanFacility["greenLoanIndicator"])}
+                >
+                  {LOAN_FACILITY_YES_NO_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-row">
+                <label htmlFor="lf-edit-sll">SLL Indicator</label>
+                <select
+                  id="lf-edit-sll"
+                  className="field"
+                  value={draft.sllIndicator}
+                  onChange={(event) => update("sllIndicator", event.target.value as LoanFacility["sllIndicator"])}
+                >
+                  {LOAN_FACILITY_YES_NO_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-row client-form-span-2">
+                <label htmlFor="lf-edit-credit-connect">Credit Connect Indicator</label>
+                <select
+                  id="lf-edit-credit-connect"
+                  className="field"
+                  value={draft.creditConnectIndicator}
+                  onChange={(event) =>
+                    update("creditConnectIndicator", event.target.value as LoanFacility["creditConnectIndicator"])
+                  }
+                >
+                  {LOAN_FACILITY_YES_NO_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </section>
+        </div>
+        <footer className="client-form-footer">
+          <button type="button" className="secondary-button" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="button" className="primary-button" onClick={() => onSave(draft)}>
+            Save
+          </button>
+        </footer>
+      </section>
+    </div>,
+    document.body,
+  );
+}
+
+function LoanFacilityNestedTable({
+  facilities,
+  columns,
+  sort,
+  filters,
+  onSortChange,
+  onFilterChange,
+  onColumnsReorder,
+  onUpdateFacility,
+  onDeleteFacility,
+}: {
+  facilities: LoanFacility[];
+  columns: ColumnDef[];
+  sort: SortState;
+  filters: ColumnFilters;
+  onSortChange: (next: SortState) => void;
+  onFilterChange: (key: string, next: ColumnFilter | undefined) => void;
+  onColumnsReorder: (next: ColumnDef[]) => void;
+  onUpdateFacility?: (next: LoanFacility) => void;
+  onDeleteFacility?: (facilityId: string) => void;
+}) {
+  const [editingFacility, setEditingFacility] = useState<LoanFacility | null>(null);
+  const visibleFacilities = useMemo(
+    () => applyColumnSortFilter(facilities, columns, sort, filters, getLoanFacilityCellValue),
+    [facilities, columns, sort, filters],
+  );
+
+  return (
+    <>
+      <ResizableTable
+      wrapClassName="table-wrap is-loan-facility-nested"
+      tableClassName="list-table loan-facility-table"
+      columns={columns}
+      sort={sort}
+      filters={filters}
+      dataWidth={140}
+      onSortChange={onSortChange}
+      onFilterChange={onFilterChange}
+      onColumnsReorder={onColumnsReorder}
+    >
+      <tbody>
+        {visibleFacilities.map((facility) => (
+          <tr key={facility.id} className="is-row-interactive">
+            {columns.map((column) => {
+              if (column.key === "name") {
+                return (
+                  <td key={column.key}>
+                    <span
+                      className="loan-facility-name-cell"
+                      onClick={(event) => event.stopPropagation()}
+                      onDoubleClick={(event) => event.stopPropagation()}
+                    >
+                      <span className="loan-facility-row-actions">
+                        <RowActions
+                          context={{
+                            id: facility.id,
+                            label: facility.name,
+                          }}
+                          onEdit={() => setEditingFacility({ ...facility })}
+                          onDelete={() => onDeleteFacility?.(facility.id)}
+                        />
+                      </span>
+                      <span className="loan-facility-name-text">{facility.name}</span>
+                    </span>
+                  </td>
+                );
+              }
+              if (column.type === "enum" && column.colorable !== false) {
+                const raw = facility[column.key as keyof LoanFacility];
+                const value = raw == null || raw === "" ? null : String(raw);
+                return <EnumFillTd key={column.key} column={column} value={value} />;
+              }
+              if (column.key === "amount") {
+                return <td key={column.key}>{formatLoanAmount(facility.currency, facility.amount)}</td>;
+              }
+              const value = facility[column.key as keyof LoanFacility];
+              return <td key={column.key}>{value == null || value === "" ? "" : String(value)}</td>;
+            })}
+          </tr>
+        ))}
+      </tbody>
+    </ResizableTable>
+      {editingFacility ? (
+        <LoanFacilityEditModal
+          facility={editingFacility}
+          onClose={() => setEditingFacility(null)}
+          onSave={(next) => {
+            onUpdateFacility?.(next);
+            setEditingFacility(null);
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
+
 function DealsWorkspace({
   moduleKey = "deals",
   view = LOAN_PUBLIC_VIEWS[0],
@@ -7684,26 +8032,30 @@ function DealsWorkspace({
   const [importOpen, setImportOpen] = useState(false);
   const [returnToHome, setReturnToHome] = useState(false);
   const [expandedLoanIds, setExpandedLoanIds] = useState<Set<string>>(() => new Set());
+  const [facilityRows, setFacilityRows] = useState(() => [...loanFacilities]);
+  const [facilityOrderedColumns, setFacilityOrderedColumns] = useState(loanFacilityColumns);
+  const [facilitySort, setFacilitySort] = useState<SortState>(null);
+  const [facilityColumnFilters, setFacilityColumnFilters] = useState<ColumnFilters>({});
   const [appliedRelatedRules, setAppliedRelatedRules] = useState<RelatedModuleRule[]>([]);
   const [sidebarColumnFilters, setSidebarColumnFilters] = useState<ColumnFilters>({});
   const facilityCountByLoanId = useMemo(() => {
     if (moduleKey !== "deals") return null;
     const counts = new Map<string, number>();
-    for (const facility of loanFacilities) {
+    for (const facility of facilityRows) {
       counts.set(facility.loanId, (counts.get(facility.loanId) ?? 0) + 1);
     }
     return counts;
-  }, [moduleKey]);
+  }, [moduleKey, facilityRows]);
   const facilitiesByLoanId = useMemo(() => {
     if (moduleKey !== "deals") return null;
     const map = new Map<string, LoanFacility[]>();
-    for (const facility of loanFacilities) {
+    for (const facility of facilityRows) {
       const list = map.get(facility.loanId) ?? [];
       list.push(facility);
       map.set(facility.loanId, list);
     }
     return map;
-  }, [moduleKey]);
+  }, [moduleKey, facilityRows]);
 
   function toggleLoanFacilities(loanId: string) {
     setExpandedLoanIds((prev) => {
@@ -7789,7 +8141,6 @@ function DealsWorkspace({
 
   function renderDealCell(deal: Deal, column: ColumnDef) {
     if (column.key === "select") {
-      const facilityCount = facilityCountByLoanId?.get(deal.id) ?? 0;
       return (
         <RowSelectCell
           context={{
@@ -7803,15 +8154,6 @@ function DealsWorkspace({
             setReturnToHome(false);
           }}
           onDelete={() => commitDealRows((prev) => prev.filter((item) => item.id !== deal.id))}
-          expand={
-            moduleKey === "deals"
-              ? {
-                  visible: facilityCount > 0,
-                  expanded: expandedLoanIds.has(deal.id),
-                  onToggle: () => toggleLoanFacilities(deal.id),
-                }
-              : undefined
-          }
         />
       );
     }
@@ -7932,7 +8274,7 @@ function DealsWorkspace({
         getCellValue={getDealCellValue}
         createLabel={`Create ${config.recordLabel}`}
         importLabel={`Import ${config.label}`}
-        showRowExpandSlot={moduleKey === "deals"}
+        showRowExpandSlot={false}
         onCreate={() => {
           setEditing(null);
           setCreating(true);
@@ -7965,9 +8307,16 @@ function DealsWorkspace({
                       }
                       if (column.key === "name" && facilityCountByLoanId) {
                         const facilityCount = facilityCountByLoanId.get(deal.id) ?? 0;
+                        const expanded = expandedLoanIds.has(deal.id);
                         return (
                           <td key={column.key}>
                             <span className="loan-name-with-count">
+                              <RowExpandTrigger
+                                visible={facilityCount > 0}
+                                expanded={expanded}
+                                label={deal.name}
+                                onToggle={() => toggleLoanFacilities(deal.id)}
+                              />
                               {deal.name}
                               {facilityCount > 0 ? (
                                 <span
@@ -7993,42 +8342,28 @@ function DealsWorkspace({
                     <tr className="loan-facility-expand-row">
                       <td colSpan={orderedColumns.length}>
                         <div className="loan-facility-nested">
-                          <div className="loan-facility-nested-scroll">
-                            <table className="loan-facility-table">
-                              <thead>
-                                <tr>
-                                  <th>Facility Name</th>
-                                  <th>Tranche</th>
-                                  <th>Facility Type</th>
-                                  <th>Amount</th>
-                                  <th>Status</th>
-                                  <th>Green Loan Indicator</th>
-                                  <th>SLL Indicator</th>
-                                  <th>Credit Connect Indicator</th>
-                                  <th>New Industry Sector</th>
-                                  <th>Deal Type</th>
-                                  <th>Loan Currency</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {facilities.map((facility) => (
-                                  <tr key={facility.id}>
-                                    <td>{facility.name}</td>
-                                    <td>{facility.tranche}</td>
-                                    <td>{facility.facilityType}</td>
-                                    <td>{formatLoanAmount(facility.currency, facility.amount)}</td>
-                                    <td>{facility.status}</td>
-                                    <td>{facility.greenLoanIndicator}</td>
-                                    <td>{facility.sllIndicator}</td>
-                                    <td>{facility.creditConnectIndicator}</td>
-                                    <td>{facility.newIndustrySector}</td>
-                                    <td>{facility.dealType}</td>
-                                    <td>{facility.currency}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
+                          <LoanFacilityNestedTable
+                            facilities={facilities}
+                            columns={facilityOrderedColumns}
+                            sort={facilitySort}
+                            filters={facilityColumnFilters}
+                            onSortChange={setFacilitySort}
+                            onFilterChange={(key, next) => {
+                              setFacilityColumnFilters((prev) => {
+                                const copy = { ...prev };
+                                if (!next) delete copy[key];
+                                else copy[key] = next;
+                                return copy;
+                              });
+                            }}
+                            onColumnsReorder={setFacilityOrderedColumns}
+                            onUpdateFacility={(next) => {
+                              setFacilityRows((prev) => prev.map((item) => (item.id === next.id ? next : item)));
+                            }}
+                            onDeleteFacility={(facilityId) => {
+                              setFacilityRows((prev) => prev.filter((item) => item.id !== facilityId));
+                            }}
+                          />
                         </div>
                       </td>
                     </tr>
@@ -8054,8 +8389,6 @@ function CalendarWorkspace() {
           <span className="pill">Day</span>
           <span className="pill">Week</span>
           <span className="pill active">Month</span>
-          <button className="primary-button">Create</button>
-          <button className="secondary-button">Options</button>
         </div>
       </div>
       <div className="calendar-grid">
