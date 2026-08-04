@@ -2185,6 +2185,14 @@ html[data-mode="night"] .mode-toggle {
   padding-right: 2px;
 }
 
+.custom-view-modal-footer {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
 .custom-view-section {
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -4588,6 +4596,21 @@ button.pill {
   overflow: hidden;
 }
 
+.call-form-card {
+  padding: 18px;
+}
+
+.call-form-footer {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 18px;
+  padding-right: 96px;
+}
+
 .card-header,
 .section-header {
   align-items: center;
@@ -6268,6 +6291,10 @@ html[data-mode="night"] .loan-facility-table tbody tr:hover td {
   margin-bottom: 4px;
 }
 
+.loan-facility-edit-modal .client-form-footer {
+  border-top: 0;
+}
+
 .list-table tbody tr.is-facility-expanded > td {
   background: color-mix(in srgb, var(--brand) 4%, var(--panel));
 }
@@ -7002,10 +7029,10 @@ html[data-mode="night"] .client-meta-account-inactive {
   font-size: 11px;
   justify-content: flex-start;
   min-height: 34px;
-  padding: 7px 8px;
+  padding: 7px 28px 7px 8px;
   position: relative;
   text-align: left;
-  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms ease;
+  transition: color 140ms ease;
   width: 100%;
 }
 
@@ -7043,17 +7070,20 @@ html[data-mode="night"] .client-meta-account-inactive {
   border-radius: 4px;
   color: inherit;
   display: flex;
-  font-size: 24px;
+  font-size: 16px;
   font-weight: 500;
-  height: 0;
+  height: 20px;
   justify-content: center;
   line-height: 1;
-  margin-left: auto;
   opacity: 0;
   overflow: hidden;
-  transform: translateX(2px);
-  transition: opacity 120ms ease, transform 120ms ease, height 120ms ease, padding 120ms ease, min-width 120ms ease;
-  width: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  transition: opacity 120ms ease, background 120ms ease;
+  width: 20px;
 }
 
 html[data-mode="night"] .client-related-item-add {
@@ -7083,21 +7113,16 @@ html[data-mode="night"] .client-related-item-tooltip {
 }
 
 .client-related-item:hover {
-  background: color-mix(in srgb, var(--brand-soft) 78%, var(--panel));
-  border-color: color-mix(in srgb, var(--brand) 16%, transparent);
+  background: transparent;
+  border-color: transparent;
   color: var(--brand);
-  transform: translateX(2px);
 }
 .client-related-item:hover .client-related-item-count {
   color: var(--brand);
 }
 .client-related-item:hover .client-related-item-add {
-  height: 20px;
-  min-width: 20px;
   opacity: 1;
-  padding: 0 4px;
-  transform: translateX(0);
-  width: 20px;
+  pointer-events: auto;
 }
 .client-related-item:hover .client-related-item-tooltip {
   opacity: 0;
@@ -10043,10 +10068,16 @@ html[data-mode="night"] .loan-stage-tooltip::after {
 }
 
 .ai-chat {
-  bottom: 24px;
+  left: auto;
   position: fixed;
-  right: 24px;
-  z-index: 80;
+  top: auto;
+  touch-action: none;
+  z-index: 9999;
+}
+
+.ai-chat.is-dragging {
+  cursor: grabbing;
+  user-select: none;
 }
 
 .ai-chat-launcher {
@@ -10057,6 +10088,7 @@ html[data-mode="night"] .loan-stage-tooltip::after {
   box-shadow:
     0 12px 32px rgb(15 23 42 / 14%),
     0 2px 8px rgb(15 23 42 / 8%);
+  cursor: grab;
   display: inline-flex;
   height: 48px;
   justify-content: center;
@@ -10071,6 +10103,10 @@ html[data-mode="night"] .loan-stage-tooltip::after {
     0 16px 36px rgb(15 23 42 / 18%),
     0 3px 10px rgb(15 23 42 / 9%);
   transform: translateY(-2px);
+}
+
+.ai-chat.is-dragging .ai-chat-launcher:hover {
+  transform: none;
 }
 
 .ai-chat-launcher:focus-visible {
@@ -10132,9 +10168,22 @@ html[data-mode="night"] .loan-stage-tooltip::after {
   align-items: center;
   background: linear-gradient(135deg, var(--nav) 0%, var(--nav-soft) 100%);
   color: #fff;
+  cursor: grab;
   display: flex;
   justify-content: space-between;
   padding: 14px 14px 14px 16px;
+  touch-action: none;
+}
+
+.ai-chat.is-dragging .ai-chat-header,
+.ai-chat.is-dragging .ai-chat-launcher {
+  cursor: grabbing;
+}
+
+.ai-chat-header-actions {
+  cursor: default;
+  display: inline-flex;
+  gap: 4px;
 }
 
 .ai-chat-brand {
@@ -10176,11 +10225,6 @@ html[data-mode="night"] .loan-stage-tooltip::after {
   display: inline-block;
   height: 6px;
   width: 6px;
-}
-
-.ai-chat-header-actions {
-  display: inline-flex;
-  gap: 4px;
 }
 
 .ai-chat-header-actions button {
@@ -10372,11 +10416,6 @@ html[data-mode="night"] .loan-stage-tooltip::after {
 }
 
 @media (max-width: 640px) {
-  .ai-chat {
-    bottom: 16px;
-    right: 16px;
-  }
-
   .ai-chat-panel {
     height: min(72vh, calc(100vh - 32px));
     width: min(100vw - 24px, 400px);

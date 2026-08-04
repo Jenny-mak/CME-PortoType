@@ -2979,7 +2979,7 @@ function CustomViewModal({
           {error ? <p className="custom-view-error">{error}</p> : null}
         </div>
 
-        <div className="pill-tabs" style={{ justifyContent: "flex-end", marginTop: 18 }}>
+        <div className="custom-view-modal-footer">
           <button type="button" className="secondary-button" onClick={onClose}>
             Cancel
           </button>
@@ -6918,7 +6918,7 @@ function CallsWorkspace({
 
 function CallForm() {
   return (
-    <section className="card" style={{ padding: 18 }}>
+    <section className="card call-form-card">
       <h3>Log a call</h3>
       <div className="form-grid">
         {["Voice Recording", "Call Purpose", "Call Agenda", "Call Result", "Description"].map((field) => (
@@ -6928,10 +6928,14 @@ function CallForm() {
           </div>
         ))}
       </div>
-      <div className="pill-tabs" style={{ justifyContent: "flex-end", marginTop: 18 }}>
-        <button className="secondary-button">Cancel</button>
-        <button className="primary-button">Save</button>
-      </div>
+      <footer className="call-form-footer">
+        <button className="secondary-button" type="button">
+          Cancel
+        </button>
+        <button className="primary-button" type="button">
+          Save
+        </button>
+      </footer>
     </section>
   );
 }
@@ -7488,10 +7492,6 @@ function LoanFormPage({
 
       <div className="client-form-body">
           <section className="client-form-section">
-            <div className="client-form-section-head">
-              <strong>{config.recordLabel} Overview</strong>
-              <span>Borrower and ownership</span>
-            </div>
             <div className="client-form-grid">
               <div className={`form-row ${nameError ? "is-invalid" : ""}`}>
                 <label htmlFor="loan-name">{config.recordLabel} Name <span className="field-required">*</span></label>
@@ -7555,10 +7555,6 @@ function LoanFormPage({
           </section>
 
           <section className="client-form-section">
-            <div className="client-form-section-head">
-              <strong>Facility Terms</strong>
-              <span>Product, amount and repayment</span>
-            </div>
             <div className="client-form-grid">
               <div className="form-row">
                 <label htmlFor="loan-product">Product Type</label>
@@ -7627,10 +7623,6 @@ function LoanFormPage({
           </section>
 
           <section className="client-form-section">
-            <div className="client-form-section-head">
-              <strong>Pricing & Credit Risk</strong>
-              <span>Rate, fees, collateral and risk grade</span>
-            </div>
             <div className="client-form-grid">
               <div className="form-row">
                 <label htmlFor="loan-rate-type">Rate Type</label>
@@ -7713,10 +7705,6 @@ function LoanFormPage({
           </section>
 
           <section className="client-form-section">
-            <div className="client-form-section-head">
-              <strong>Key Dates</strong>
-              <span>Application through review</span>
-            </div>
             <div className="client-form-grid">
               <div className="form-row">
                 <label htmlFor="loan-application-date">Application Date</label>
@@ -7752,10 +7740,6 @@ function LoanFormPage({
           </section>
 
           <section className="client-form-section">
-            <div className="client-form-section-head">
-              <strong>Remarks</strong>
-              <span>Credit notes and deal context</span>
-            </div>
             <div className="client-form-grid">
               <div className="form-row" style={{ gridColumn: "1 / -1" }}>
                 <label htmlFor="loan-remarks">Remarks</label>
@@ -7783,12 +7767,32 @@ function getLoanFacilityCellValue(facility: LoanFacility, key: string): string |
 
 const LOAN_FACILITY_YES_NO_OPTIONS: LoanFacility["greenLoanIndicator"][] = ["Yes", "No"];
 
+function createBlankLoanFacility(loanId: string): LoanFacility {
+  return {
+    id: `lf-${Date.now()}`,
+    loanId,
+    name: "",
+    tranche: "",
+    facilityType: "",
+    greenLoanIndicator: "No",
+    sllIndicator: "No",
+    creditConnectIndicator: "No",
+    newIndustrySector: "",
+    dealType: "",
+    currency: "HKD",
+    amount: 0,
+    status: "Pipeline",
+  };
+}
+
 function LoanFacilityEditModal({
   facility,
+  mode = "edit",
   onClose,
   onSave,
 }: {
   facility: LoanFacility;
+  mode?: "create" | "edit";
   onClose: () => void;
   onSave: (next: LoanFacility) => void;
 }) {
@@ -7803,8 +7807,8 @@ function LoanFacilityEditModal({
       <section className="modal-card loan-facility-edit-modal" onClick={(event) => event.stopPropagation()}>
         <header className="row-action-form-head">
           <div>
-            <h2>Edit Loan Facility</h2>
-            <p className="muted">{facility.name}</p>
+            <h2>{mode === "create" ? "New Loan Facility" : "Edit Loan Facility"}</h2>
+            <p className="muted">{mode === "create" ? "Create a new facility tranche" : facility.name}</p>
           </div>
           <button type="button" className="icon-button" aria-label="Close" onClick={onClose}>
             <X size={16} />
@@ -7986,6 +7990,7 @@ function LoanFacilityEditModal({
 }
 
 function LoanFacilityNestedTable({
+  loanId,
   facilities,
   columns,
   sort,
@@ -7993,9 +7998,11 @@ function LoanFacilityNestedTable({
   onSortChange,
   onFilterChange,
   onColumnsReorder,
+  onCreateFacility,
   onUpdateFacility,
   onDeleteFacility,
 }: {
+  loanId: string;
   facilities: LoanFacility[];
   columns: ColumnDef[];
   sort: SortState;
@@ -8003,10 +8010,11 @@ function LoanFacilityNestedTable({
   onSortChange: (next: SortState) => void;
   onFilterChange: (key: string, next: ColumnFilter | undefined) => void;
   onColumnsReorder: (next: ColumnDef[]) => void;
+  onCreateFacility?: (next: LoanFacility) => void;
   onUpdateFacility?: (next: LoanFacility) => void;
   onDeleteFacility?: (facilityId: string) => void;
 }) {
-  const [editingFacility, setEditingFacility] = useState<LoanFacility | null>(null);
+  const [facilityForm, setFacilityForm] = useState<{ mode: "create" | "edit"; facility: LoanFacility } | null>(null);
   const visibleFacilities = useMemo(
     () => applyColumnSortFilter(facilities, columns, sort, filters, getLoanFacilityCellValue),
     [facilities, columns, sort, filters],
@@ -8043,7 +8051,8 @@ function LoanFacilityNestedTable({
                             id: facility.id,
                             label: facility.name,
                           }}
-                          onEdit={() => setEditingFacility({ ...facility })}
+                          onNew={() => setFacilityForm({ mode: "create", facility: createBlankLoanFacility(loanId) })}
+                          onEdit={() => setFacilityForm({ mode: "edit", facility: { ...facility } })}
                           onDelete={() => onDeleteFacility?.(facility.id)}
                         />
                       </span>
@@ -8067,13 +8076,15 @@ function LoanFacilityNestedTable({
         ))}
       </tbody>
     </ResizableTable>
-      {editingFacility ? (
+      {facilityForm ? (
         <LoanFacilityEditModal
-          facility={editingFacility}
-          onClose={() => setEditingFacility(null)}
+          facility={facilityForm.facility}
+          mode={facilityForm.mode}
+          onClose={() => setFacilityForm(null)}
           onSave={(next) => {
-            onUpdateFacility?.(next);
-            setEditingFacility(null);
+            if (facilityForm.mode === "create") onCreateFacility?.(next);
+            else onUpdateFacility?.(next);
+            setFacilityForm(null);
           }}
         />
       ) : null}
@@ -8446,6 +8457,7 @@ function DealsWorkspace({
                       <td colSpan={orderedColumns.length}>
                         <div className="loan-facility-nested">
                           <LoanFacilityNestedTable
+                            loanId={deal.id}
                             facilities={facilities}
                             columns={facilityOrderedColumns}
                             sort={facilitySort}
@@ -8460,6 +8472,9 @@ function DealsWorkspace({
                               });
                             }}
                             onColumnsReorder={setFacilityOrderedColumns}
+                            onCreateFacility={(next) => {
+                              setFacilityRows((prev) => [...prev, next]);
+                            }}
                             onUpdateFacility={(next) => {
                               setFacilityRows((prev) => prev.map((item) => (item.id === next.id ? next : item)));
                             }}

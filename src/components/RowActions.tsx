@@ -44,9 +44,10 @@ type Props = {
   context: RowActionContext;
   onEdit?: () => void;
   onDelete?: () => void;
+  onNew?: () => void;
 };
 
-export function RowActions({ context, onEdit, onDelete }: Props) {
+export function RowActions({ context, onEdit, onDelete, onNew }: Props) {
   const [open, setOpen] = useState(false);
   const [flyout, setFlyout] = useState<Flyout>(null);
   const [form, setForm] = useState<RowActionForm>(null);
@@ -106,6 +107,7 @@ export function RowActions({ context, onEdit, onDelete }: Props) {
   }
 
   const rootItems: MenuItem[] = [
+    ...(onNew ? [{ kind: "action" as const, label: "New", action: onNew }] : []),
     {
       kind: "action",
       label: "Edit",

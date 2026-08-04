@@ -167,21 +167,191 @@ function generateMockReply(question: string, user: PublicUser) {
   return "I'm a demo assistant running on sample CRM data. Try asking me to summarize today's priorities, identify at-risk clients, review the loan pipeline, or look up a client by name.";
 }
 
+const LAUNCHER_SIZE = 48;
+const PANEL_WIDTH = 400;
+const PANEL_HEIGHT = 640;
+const VIEWPORT_MARGIN = 12;
+const DRAG_THRESHOLD = 4;
+
+function getWidgetSize(open: boolean) {
+  if (!open || typeof window === "undefined") {
+    return { width: LAUNCHER_SIZE, height: LAUNCHER_SIZE };
+  }
+  return {
+    width: Math.min(PANEL_WIDTH, window.innerWidth - 32),
+    height: Math.min(PANEL_HEIGHT, window.innerHeight - 48),
+  };
+}
+
+function getDefaultPosition(open: boolean) {
+  if (typeof window === "undefined") {
+    return { x: VIEWPORT_MARGIN, y: VIEWPORT_MARGIN };
+  }
+  const { width, height } = getWidgetSize(open);
+  return {
+    x: Math.max(VIEWPORT_MARGIN, window.innerWidth - 24 - width),
+    y: Math.max(VIEWPORT_MARGIN, window.innerHeight - 24 - height),
+  };
+}
+
+function clampPosition(position: { x: number; y: number }, open: boolean) {
+  if (typeof window === "undefined") return position;
+  const { width, height } = getWidgetSize(open);
+  return {
+    x: Math.min(Math.max(VIEWPORT_MARGIN, position.x), window.innerWidth - width - VIEWPORT_MARGIN),
+    y: Math.min(Math.max(VIEWPORT_MARGIN, position.y), window.innerHeight - height - VIEWPORT_MARGIN),
+  };
+}
+
+function getPanelPositionFromLauncher(launcherPosition: { x: number; y: number }) {
+  const launcher = getWidgetSize(false);
+  const panel = getWidgetSize(true);
+  return clampPosition(
+    {
+      x: launcherPosition.x + launcher.width - panel.width,
+      y: launcherPosition.y + launcher.height - panel.height,
+    },
+    true,
+  );
+}
+
 export function AiChatWidget({ user, activeModule }: { user: PublicUser; activeModule: ModuleKey }) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>(() => [initialMessage(user.displayName)]);
+  const [position, setPosition] = useState<{ x: number; y: number }>(() => getDefaultPosition(false));
+  const [isDragging, setIsDragging] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const replyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isThinkingRef = useRef(false);
+  const launcherPositionRef = useRef(getDefaultPosition(false));
+  const draggedWhileOpenRef = useRef(false);
+  const hasCustomLauncherPositionRef = useRef(false);
+  const positionRef = useRef(position);
+  const dragStateRef = useRef<{
+    pointerId: number;
+    startClientX: number;
+    startClientY: number;
+    startX: number;
+    startY: number;
+    moved: boolean;
+  } | null>(null);
+  const skipNextCloseRestoreRef = useRef(true);
+  const prevOpenRef = useRef(open);
   const quickPrompts = useMemo(() => QUICK_PROMPTS[activeModule] ?? QUICK_PROMPTS.home!, [activeModule]);
+
+  useEffect(() => {
+    positionRef.current = position;
+    const openJustChanged = prevOpenRef.current !== open;
+    prevOpenRef.current = open;
+    if (!open && !openJustChanged) {
+      launcherPositionRef.current = position;
+    }
+  }, [position, open]);
 
   useEffect(() => {
     isThinkingRef.current = isThinking;
   }, [isThinking]);
+
+  useEffect(() => {
+    if (skipNextCloseRestoreRef.current) {
+      skipNextCloseRestoreRef.current = false;
+      return;
+    }
+
+    if (open) {
+      draggedWhileOpenRef.current = false;
+      setPosition((current) => {
+        launcherPositionRef.current = current;
+        return getPanelPositionFromLauncher(current);
+      });
+      return;
+    }
+
+    if (draggedWhileOpenRef.current) {
+      const next = clampPosition(positionRef.current, false);
+      launcherPositionRef.current = next;
+      hasCustomLauncherPositionRef.current = true;
+      setPosition(next);
+      return;
+    }
+
+    setPosition(launcherPositionRef.current);
+  }, [open]);
+
+  useEffect(() => {
+    function handleResize() {
+      if (open) {
+        setPosition(getPanelPositionFromLauncher(launcherPositionRef.current));
+        return;
+      }
+
+      const next = hasCustomLauncherPositionRef.current
+        ? clampPosition(launcherPositionRef.current, false)
+        : getDefaultPosition(false);
+      launcherPositionRef.current = next;
+      setPosition(next);
+    }
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [open]);
+
+  function beginDrag(event: React.PointerEvent<HTMLElement>) {
+    if (event.button !== 0) return;
+
+    const target = event.target as HTMLElement | null;
+    if (open && target?.closest(".ai-chat-header-actions button")) return;
+
+    dragStateRef.current = {
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startX: position.x,
+      startY: position.y,
+      moved: false,
+    };
+    setIsDragging(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  }
+
+  function moveDrag(event: React.PointerEvent<HTMLElement>) {
+    const drag = dragStateRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    const deltaX = event.clientX - drag.startClientX;
+    const deltaY = event.clientY - drag.startClientY;
+    if (!drag.moved && Math.hypot(deltaX, deltaY) < DRAG_THRESHOLD) return;
+
+    drag.moved = true;
+    if (open) draggedWhileOpenRef.current = true;
+
+    const next = clampPosition({ x: drag.startX + deltaX, y: drag.startY + deltaY }, open);
+    setPosition(next);
+    if (!open) {
+      launcherPositionRef.current = next;
+      hasCustomLauncherPositionRef.current = true;
+    }
+  }
+
+  function finishDrag(event: React.PointerEvent<HTMLElement>, onClick?: () => void) {
+    const drag = dragStateRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+
+    const moved = drag.moved;
+    dragStateRef.current = null;
+    setIsDragging(false);
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    if (!moved) onClick?.();
+  }
 
   const sendMessage = useCallback(
     (value: string) => {
@@ -274,10 +444,20 @@ export function AiChatWidget({ user, activeModule }: { user: PublicUser; activeM
   }
 
   return (
-    <div ref={rootRef} className={`ai-chat ${open ? "is-open" : ""}`}>
+    <div
+      ref={rootRef}
+      className={`ai-chat ${open ? "is-open" : ""} ${isDragging ? "is-dragging" : ""}`}
+      style={{ left: position.x, top: position.y }}
+    >
       {open ? (
         <section className="ai-chat-panel" role="dialog" aria-label="CRM AI Assistant">
-          <header className="ai-chat-header">
+          <header
+            className="ai-chat-header"
+            onPointerDown={beginDrag}
+            onPointerMove={moveDrag}
+            onPointerUp={(event) => finishDrag(event)}
+            onPointerCancel={(event) => finishDrag(event)}
+          >
             <span className="ai-chat-brand">
               <span className="ai-chat-brand-icon">
                 <Sparkles size={17} />
@@ -352,7 +532,15 @@ export function AiChatWidget({ user, activeModule }: { user: PublicUser; activeM
           <p className="ai-chat-disclaimer">Demo responses use sample CRM data and may be inaccurate.</p>
         </section>
       ) : (
-        <button className="ai-chat-launcher" type="button" onClick={() => setOpen(true)} aria-label="Open CRM AI Assistant">
+        <button
+          className="ai-chat-launcher"
+          type="button"
+          aria-label="Open CRM AI Assistant"
+          onPointerDown={beginDrag}
+          onPointerMove={moveDrag}
+          onPointerUp={(event) => finishDrag(event, () => setOpen(true))}
+          onPointerCancel={(event) => finishDrag(event)}
+        >
           <span className="ai-chat-launcher-mark" aria-hidden="true">
             <Sparkles size={20} strokeWidth={1.9} />
           </span>
